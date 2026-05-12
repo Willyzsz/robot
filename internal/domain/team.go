@@ -18,7 +18,7 @@ func NewTeam(name, school, grade string, members []*Member, categoryID CategoryI
 	}
 
 	if len(members) < 1 {
-		return nil, NewRobotErr(op, "members", len(members), ErrNotEnough, "members must be greater than 1") 
+		return nil, NewRobotErr(op,"", "members", len(members), ErrNotEnough, "members must be greater than 1") 
 	}
 
 	leaderCount := 0
@@ -29,9 +29,9 @@ func NewTeam(name, school, grade string, members []*Member, categoryID CategoryI
 	}
 	switch leaderCount {
 	case 0:
-		return nil, NewRobotErr(op, "leader", leaderCount, ErrNotFound, "team must have one leader")
+		return nil, NewRobotErr(op,"", "leader", leaderCount, ErrNotFound, "team must have one leader")
 	case 2:
-		return nil, NewRobotErr(op, "leader", leaderCount, ErrAlreadyExists, "team cannot have 2 leaders")
+		return nil, NewRobotErr(op,"", "leader", leaderCount, ErrAlreadyExists, "team cannot have 2 leaders")
 	}
 	
 	return &Team{

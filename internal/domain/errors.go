@@ -15,6 +15,7 @@ var (
 
 type RobotError struct {
 	Op	string
+	InternalOp string
 	Field string
 	Value any
 	Err error
@@ -23,20 +24,21 @@ type RobotError struct {
 
 func (e *RobotError) Error() string {
 	//[Create] ID: 1050 invalid. ID must be a number 
-	return	fmt.Sprintf("[%s] %s: %s - %s. %s", e.Op, e.Field, e.Value, e.Err, e.Msg) 
+	return	fmt.Sprintf("[%s->%s] %s: %v - %s. %s", e.Op, e.InternalOp, e.Field, e.Value, e.Err, e.Msg) 
 }
 
 func (e *RobotError) Unwrap() error {
 	return e.Err
 }
 
-func NewRobotErr(op, field string, value any, err error, msg string) *RobotError {
+func NewRobotErr(op, intOp, field string, value any, err error, msg string) *RobotError {
 	if err == nil {
 		return nil
 	}
 
 	return &RobotError{
 		Op: op,
+		InternalOp: intOp,
 		Field: field,
 		Value: value,
 		Err: err,

@@ -12,7 +12,7 @@ type Category struct {
 
 func NewCategory(name string) (*Category, error) {
 	if name == "" {
-		return nil, ErrEmpty
+		return nil, NewRobotErr("NewCategory", "", "name", name, ErrEmpty, "category name cannot be emtpy")
 	}
 
 	return &Category{

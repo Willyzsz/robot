@@ -11,7 +11,7 @@ type Member struct {
 
 func NewMember(name, email string, isLeader bool) (*Member, error) {
 	if name == "" {
-		return nil, ErrEmpty
+		return nil, NewRobotErr("NewMember", "", "name", name, ErrEmpty, "member name cannot be empty")
 	}
 
 	return &Member{

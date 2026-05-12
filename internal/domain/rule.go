@@ -10,7 +10,7 @@ type Rule struct {
 
 func NewRule(description string, categoryID CategoryID) (*Rule, error) {
 	if description == "" {
-		return nil, NewRobotErr("newRule", "description", description, ErrEmpty, "description cannot be empty")
+		return nil, NewRobotErr("newRule", "", "description", description, ErrEmpty, "description cannot be empty")
 	}
 
 	return &Rule{

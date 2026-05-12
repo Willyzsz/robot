@@ -3,9 +3,16 @@ package store
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+)
+
+const (
+	UniqueViolation string = "23505"
+	ForeignKeyViolation string = "23503"
 )
 
 type Store struct {
@@ -13,6 +20,10 @@ type Store struct {
 }
 
 func ConnStringFromEnv() string {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatal(err)
+	}
+
 	user := os.Getenv("POSTGRES_USER")
 	password := os.Getenv("POSTGRES_PASSWORD")
 	host := os.Getenv("POSTGRES_HOST")
@@ -42,6 +53,6 @@ func Open(ctx context.Context) (*Store, error) {
 	return &Store{db: pool}, nil
 }
 
-func (s *Store) Close() {
-	s.db.Close()
+func (st *Store) Close() {
+	st.db.Close()
 }
