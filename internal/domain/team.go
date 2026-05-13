@@ -7,38 +7,85 @@ type Team struct {
 	Name       string
 	School     string
 	Grade      string
+	Teacher    string
 	Members    []*Member
 	CategoryID CategoryID
 }
 
-func NewTeam(name, school, grade string, members []*Member, categoryID CategoryID) (*Team, error) {
+type TeamQuery struct {
+	Name       string
+	School     string
+	Grade      string
+	Teacher    string
+	CategoryID CategoryID
+}
+
+func NewTeam(name, school, grade, teacher string, categoryID CategoryID) (*Team, error) {
 	op := "NewTeam"
-	if name == "" || school == "" || grade == "" {
-		return nil, ErrEmpty
+	if name == "" {
+		return nil, NewRobotErr(op, "", "name", name, ErrEmpty, "name cannot be empty")
 	}
 
-	if len(members) < 1 {
-		return nil, NewRobotErr(op,"", "members", len(members), ErrNotEnough, "members must be greater than 1") 
+	if school == "" {
+		return nil, NewRobotErr(op, "", "school", school, ErrEmpty, "school cannot be empty")
 	}
 
-	leaderCount := 0
-	for _, member := range members {
-		if member.IsLeader {
-			leaderCount++
-		}
+	if grade == "" {
+		return nil, NewRobotErr(op, "", "grade", grade, ErrEmpty, "grade cannot be empty")
 	}
-	switch leaderCount {
-	case 0:
-		return nil, NewRobotErr(op,"", "leader", leaderCount, ErrNotFound, "team must have one leader")
-	case 2:
-		return nil, NewRobotErr(op,"", "leader", leaderCount, ErrAlreadyExists, "team cannot have 2 leaders")
+
+	if teacher == "" {
+		return nil, NewRobotErr(op, "", "teacher", teacher, ErrEmpty, "teacher cannot be empty")
 	}
-	
+
 	return &Team{
 		Name:       name,
 		School:     school,
 		Grade:      grade,
-		Members:    members,
+		Teacher:    teacher,
+		Members:    []*Member{},
 		CategoryID: categoryID,
 	}, nil
+}
+
+func (t *Team) AddMember(member *Member) error {
+	if member == nil {
+		return ErrInvalid
+	}
+
+	if t.ID != member.TeamID {
+		return ErrInvalid
+	}
+
+	for _, existing := range t.Members {
+		if existing.ID != 0 && member.ID != 0 && existing.ID == member.ID {
+			return ErrAlreadyExists
+		}
+		if existing.Email != "" && existing.Email == member.Email {
+			return ErrAlreadyExists
+		}
+	}
+
+	t.Members = append(t.Members, member)
+	return nil
+}
+
+func (t *Team) ValidateMembers() error {
+	op := "ValidateMembers"
+
+	if len(t.Members) < 1 {
+		return NewRobotErr(op, "", "members", len(t.Members), ErrNotEnough, "team must have at least 1 member")
+	}
+
+	leaderCount := 0
+	for _, member := range t.Members {
+		if member.IsLeader {
+			leaderCount++
+		}
+	}
+	if leaderCount != 1 {
+		return NewRobotErr(op, "", "members", leaderCount, ErrInvalid, "there must be exactly one leader")
+	}
+
+	return nil
 }

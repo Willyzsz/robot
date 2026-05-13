@@ -1,14 +1,13 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"robot/internal/app"
 )
 
 func main() {
-	if _, err := app.LoadFromExcel("form.xlsx"); err != nil {
-		fmt.Print(err)
-		return
+	if err := app.LoadFromExcel("form.xlsx"); err != nil {
+		log.Fatal(err)
 	}
 }
 

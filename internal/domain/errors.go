@@ -11,6 +11,7 @@ var (
 	ErrAlreadyExists = errors.New("already exists")
 	ErrNotFound = errors.New("not found")
 	ErrInvalid = errors.New("invalid")
+	ErrInvalidReference = errors.New("invalid reference")
 )
 
 type RobotError struct {
@@ -23,7 +24,7 @@ type RobotError struct {
 }
 
 func (e *RobotError) Error() string {
-	//[Create] ID: 1050 invalid. ID must be a number 
+	//[Create->Insert] ID: 1050 invalid. ID must be a number 
 	return	fmt.Sprintf("[%s->%s] %s: %v - %s. %s", e.Op, e.InternalOp, e.Field, e.Value, e.Err, e.Msg) 
 }
 

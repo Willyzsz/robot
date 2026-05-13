@@ -19,9 +19,9 @@ type Store struct {
 	db *pgxpool.Pool
 }
 
-func ConnStringFromEnv() string {
+func ConnStringFromEnv() (string, error) {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	user := os.Getenv("POSTGRES_USER")
@@ -38,11 +38,16 @@ func ConnStringFromEnv() string {
 		host,
 		port,
 		db,
-	)
+	), nil
 }
 
 func Open(ctx context.Context) (*Store, error) {
-	pool, err := pgxpool.New(ctx, ConnStringFromEnv())
+	connStr, err := ConnStringFromEnv()
+	if err != nil {
+		log.Printf("failed to get connection string from env: %v", err)
+		return nil, err
+	}
+	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return nil, err
 	}

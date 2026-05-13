@@ -13,6 +13,8 @@ type CategoryStore struct {
 	store *Store
 }
 
+var _ domain.CategoryRepository = (*CategoryStore)(nil)
+
 func NewCategoryStore(s *Store) *CategoryStore {
 	return &CategoryStore{
 		store: s,
@@ -94,4 +96,38 @@ func (st *CategoryStore) FindByName(ctx context.Context, name string) (*domain.C
 	}
 	category.ID = id
 	return category, nil
+}
+
+func (st *CategoryStore) FindAll(ctx context.Context) ([]*domain.Category, error) {
+	op := "FindAll"
+	
+	query := `
+		SELECT id, name
+		FROM category
+	`
+	rows, err := st.store.db.Query(ctx, query)
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error listing categories")
+	}
+
+	categories, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Category, error) {
+		var id domain.CategoryID
+		var name string
+
+		err := row.Scan(&id, &name)
+		if err != nil {
+			return nil, domain.NewRobotErr(op, "", "scan", row, err, "something went wrong when scanning")
+		}
+		category, err := domain.NewCategory(name)
+		if err != nil {
+			return nil, err
+		}
+		category.ID = id
+		return category, nil
+	})
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "collect", rows, err, "unexpected error collecting categories")
+	}
+
+	return categories, nil
 }

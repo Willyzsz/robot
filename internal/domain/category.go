@@ -10,6 +10,7 @@ type Category struct {
 	Rules 	[]*Rule
 }
 
+
 func NewCategory(name string) (*Category, error) {
 	if name == "" {
 		return nil, NewRobotErr("NewCategory", "", "name", name, ErrEmpty, "category name cannot be emtpy")
@@ -22,6 +23,10 @@ func NewCategory(name string) (*Category, error) {
 }
 
 func (c *Category) AddRule(rule *Rule) error {
+	if rule == nil {
+		return ErrInvalid
+	}
+
 	if rule.CategoryID != c.ID {
 		return ErrInvalid
 	} 

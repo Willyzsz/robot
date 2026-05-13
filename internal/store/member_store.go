@@ -13,6 +13,8 @@ type MemberStore struct {
 	store *Store
 }
 
+var _ domain.MemberRepository = (*MemberStore)(nil)
+
 func NewMemberStore(s *Store) *MemberStore {
 	return &MemberStore{
 		store: s,
@@ -36,28 +38,28 @@ func (st *MemberStore) Insert(ctx context.Context, member *domain.Member, teamID
 		teamID,
 	).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("intert member: %w", err)
+		return 0, domain.NewRobotErr("Insert", "", "database", member.Name, err, "unexpected error inserting member")
 	}
 
 	return id, nil
 }
 
-func (st *MemberStore) FindByName(ctx context.Context, name string) (*domain.Member, domain.TeamID, error) {
-	op := "FindByName"
-	
+func (st *MemberStore) FindByID(ctx context.Context, id domain.MemberID) (*domain.Member, error) {
+	op := "FindByID"
+
 	query := `
 		SELECT id, name, email, is_leader, team_id
 		FROM member
-		WHERE name = $1
+		WHERE id = $1
 	`
 
-	var id domain.MemberID
+	var foundID domain.MemberID
 	var memberName, memberEmail string
 	var isLeader bool
 	var teamID domain.TeamID
 
-	err := st.store.db.QueryRow(ctx, query, name).Scan(
-		&id,
+	err := st.store.db.QueryRow(ctx, query, id).Scan(
+		&foundID,
 		&memberName,
 		&memberEmail,
 		&isLeader,
@@ -65,94 +67,82 @@ func (st *MemberStore) FindByName(ctx context.Context, name string) (*domain.Mem
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, 0, domain.NewRobotErr(op, "name", name, domain.ErrNotFound, "")
+			return nil, domain.NewRobotErr(op, "", "id", id, domain.ErrNotFound, "")
 		}
-		return nil, 0, fmt.Errorf("%s: %w", op, err)
+		return nil, domain.NewRobotErr(op, "", "database", id, err, "unexpected error Selecting ID")
 	}
 
-	member, err := domain.NewMember(memberName, memberEmail, isLeader)
-	if err != nil {
-		return nil, 0, err
-	}
-	member.ID = id
-	return member, teamID, nil
-}
-
-func (st *MemberStore) FindByTeam(ctx context.Context, teamID domain.TeamID) ([]*domain.Member, error) {
-	op := "FindByTeam"
-
-	query := `
-		SELECT id, name, email, is_leader
-		FROM member
-		WHERE team_id = $1
-	`
-	rows, err := st.store.db.Query(ctx, query, teamID)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer rows.Close()
-	
-	var members []*domain.Member
-
-	for rows.Next() {			
-		var id domain.MemberID
-		var memberName, memberEmail string
-		var isLeader bool
-
-		err := rows.Scan(&id, &memberName, &memberEmail, &isLeader)
-		if err != nil {
-			return nil, fmt.Errorf("%s: scan member: %w", op, err)
-		}
-		member, err := domain.NewMember(memberName, memberEmail, isLeader)
-		if err != nil {
-			return nil, err
-		}
-		member.ID = id
-		members = append(members, member)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: read members: %w", op, err)
-	}
-
-	if len(members) == 0 {
-		return nil, domain.NewRobotErr(op, "teamID", teamID, domain.ErrNotFound, "")
-	}
-
-	return members, nil
-}
-
-func (st *MemberStore) FindLeaderTeam(ctx context.Context, teamID domain.TeamID) (*domain.Member, error) {
-	op := "FindLeaderTeam"
-
-	query := `
-		SELECT id, name, email, is_leader
-		FROM member
-		WHERE team_id = $1
-		AND is_leader = true
-	`
-		
-	var id domain.MemberID
-	var memberName, memberEmail string
-	var isLeader bool
-
-	err := st.store.db.QueryRow(ctx, query, teamID).Scan(
-		&id,
-		&memberName,
-		&memberEmail,
-		&isLeader,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.NewRobotErr(op, "teamID", teamID, domain.ErrNotFound, "")
-		}
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	member, err := domain.NewMember(memberName, memberEmail, isLeader)
+	member, err := domain.NewMember(memberName, memberEmail, isLeader, teamID)
 	if err != nil {
 		return nil, err
 	}
 	member.ID = id
 	return member, nil
+}
+
+func (st *MemberStore) Find(ctx context.Context, q domain.MemberQuery) ([]*domain.Member, error) {
+	op := "Find"
+
+	args, query := st.buildQuery(q)
+
+	rows, err := st.store.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error finding members")
+	}
+	
+	members, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Member, error) {
+		var foundID domain.MemberID
+		var memberName, memberEmail string
+		var isLeader bool
+		var teamID domain.TeamID
+
+		err := row.Scan(
+			&foundID,
+			&memberName,
+			&memberEmail,
+			&isLeader,
+			&teamID,
+		)
+		if err != nil {
+			return nil, domain.NewRobotErr(op, "", "scan", row, err, "unexpected error scanning member")
+		}
+
+		member, err := domain.NewMember(memberName, memberEmail, isLeader, teamID)
+		if err != nil {
+			return nil, err
+		}
+		member.ID = foundID
+		return member, nil
+	})
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error collecting members")
+	}
+
+	return members, nil
+}
+
+func (st *MemberStore) buildQuery(q domain.MemberQuery) ([]any, string) {
+	query := `
+		SELECT id, name, email, is_leader, team_id
+		FROM member
+		WHERE 1=1
+	`
+	var args []any
+	if q.Name != "" {
+		args = append(args, q.Name)
+		query += fmt.Sprintf(" AND name = $%d", len(args))
+	}
+	if q.Email != "" {
+		args = append(args, q.Email)
+		query += fmt.Sprintf(" AND email = $%d", len(args))
+	}
+	if q.IsLeader != nil {
+		args = append(args, q.IsLeader)
+		query += fmt.Sprintf(" AND is_leader = $%d", len(args))
+	}
+	if q.TeamID != 0 {
+		args = append(args, q.TeamID)
+		query += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	return args, query
 }
