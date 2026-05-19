@@ -7,21 +7,21 @@ import (
 	"robot/internal/excel"
 )
 
-type RobotService struct {
+type ExcelService struct {
 	categoryRepository domain.CategoryRepository
 	teamRepository     domain.TeamRepository
 	memberRepository   domain.MemberRepository
 }
 
-func NewRobotService(categoryRepo domain.CategoryRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository) *RobotService {
-	return &RobotService{
+func NewExcelService(categoryRepo domain.CategoryRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository) *ExcelService {
+	return &ExcelService{
 		categoryRepository: categoryRepo,
 		teamRepository:     teamRepo,
 		memberRepository:   memberRepo,
 	}
 }
 
-func (svc *RobotService) CreateData(ctx context.Context, rows []excel.FormRow) error {
+func (svc *ExcelService) CreateData(ctx context.Context, rows []excel.FormRow) error {
 	categoriesIDs := make(map[string]domain.CategoryID)
 	teamsIDs := make(map[string]domain.TeamID)
 
@@ -56,7 +56,7 @@ func (svc *RobotService) CreateData(ctx context.Context, rows []excel.FormRow) e
 	return nil
 }
 
-func (svc *RobotService) getOrCreateCategory(ctx context.Context, name string, cache map[string]domain.CategoryID) (domain.CategoryID, error) {
+func (svc *ExcelService) getOrCreateCategory(ctx context.Context, name string, cache map[string]domain.CategoryID) (domain.CategoryID, error) {
 	if id, exists := cache[name]; exists {
 		return id, nil
 	}
@@ -81,7 +81,7 @@ func (svc *RobotService) getOrCreateCategory(ctx context.Context, name string, c
 	return id, nil
 }
 
-func (svc *RobotService) buildTeamFromRow(row excel.FormRow, categoryID domain.CategoryID) (*domain.Team, error) {
+func (svc *ExcelService) buildTeamFromRow(row excel.FormRow, categoryID domain.CategoryID) (*domain.Team, error) {
 	team, err := domain.NewTeam(row.NameTeam, row.School, row.Grade, row.Teacher, categoryID)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (svc *RobotService) buildTeamFromRow(row excel.FormRow, categoryID domain.C
 	return team, nil
 }
 
-func (svc *RobotService) getOrCreateTeam(ctx context.Context, team *domain.Team, cache map[string]domain.TeamID) (domain.TeamID, bool, error) {
+func (svc *ExcelService) getOrCreateTeam(ctx context.Context, team *domain.Team, cache map[string]domain.TeamID) (domain.TeamID, bool, error) {
 	if id, exists := cache[team.Name]; exists {
 		return id, false, nil
 	}
@@ -141,7 +141,7 @@ func (svc *RobotService) getOrCreateTeam(ctx context.Context, team *domain.Team,
 	return id, true, nil
 }
 
-func (svc *RobotService) insertMembers(ctx context.Context, team *domain.Team, teamID domain.TeamID) error {
+func (svc *ExcelService) insertMembers(ctx context.Context, team *domain.Team, teamID domain.TeamID) error {
 	for _, member := range team.Members {
 		member.TeamID = teamID
 		if _, err := svc.memberRepository.Insert(ctx, member, teamID); err != nil {

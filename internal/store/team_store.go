@@ -147,6 +147,43 @@ func (st *TeamStore) Find(ctx context.Context, t domain.TeamQuery) ([]*domain.Te
 	return teams, nil
 }
 
+func (st *TeamStore) FindAll(ctx context.Context) ([]*domain.Team, error) {
+	op := "FindAll"
+	
+	query := `
+		SELECT id, name, school, grade, teacher, category_id
+		FROM team
+	`
+	rows, err := st.store.db.Query(ctx, query)
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "database", nil, err, "unexpected error selecting teams")
+	}
+	
+	teams, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Team, error) {
+		var id domain.TeamID
+		var name, school, grade, teacher string
+		var categoryID domain.CategoryID
+
+		err := row.Scan(&id, &name, &school, &grade, &teacher, &categoryID)
+		if err != nil {
+			return nil, domain.NewRobotErr(op, "", "scan", row, err, "unexpected error scanning team")
+		}
+		
+		team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
+		if err != nil {
+			return nil, err
+		}
+		
+		team.ID = id
+		return team, nil
+	})
+
+	if err != nil {
+		return nil, domain.NewRobotErr(op, "", "collect", nil, err, "unexpected error collecting teams")
+	}
+	return teams, nil
+}
+
 func (st *TeamStore) buildQuery(t domain.TeamQuery) ([]any, string) {
 	query := `
 		SELECT id, name, school, grade, teacher, category_id

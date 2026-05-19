@@ -36,6 +36,9 @@ type TeamRepository interface {
 	// Find retrieves all teams from the given query.
 	// Returns an RobotErr wrapping ErrNotFound if no teams matching the query exist.
 	Find(ctx context.Context, t TeamQuery) ([]*Team, error)
+
+	// FindAll retrieves all teams from the repository.
+	FindAll(ctx context.Context) ([]*Team, error)
 }
 
 type MemberRepository interface {

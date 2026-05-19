@@ -28,7 +28,7 @@ func LoadFromExcel(path string) error {
 	teamRepo := store.NewTeamStore(storeDB)
 	memberRepo := store.NewMemberStore(storeDB)
 
-	service := service.NewRobotService(categoryRepo, teamRepo,memberRepo)
+	service := service.NewExcelService(categoryRepo, teamRepo,memberRepo)
 
 	if err := service.CreateData(ctx, parsedRows); err != nil {
 		return err
