@@ -3,21 +3,21 @@ package domain
 type TeamID int
 
 type Team struct {
-	ID         TeamID
-	Name       string
-	School     string
-	Grade      string
-	Teacher    string
-	Members    []*Member
-	CategoryID CategoryID
+	ID         TeamID     `json:"id"`
+	Name       string     `json:"name"`
+	School     string     `json:"school"`
+	Grade      string     `json:"grade"`
+	Teacher    string     `json:"teacher"`
+	Members    []*Member  `json:"members"`
+	CategoryID CategoryID `json:"category_id"`
 }
 
 type TeamQuery struct {
-	Name       string
-	School     string
-	Grade      string
-	Teacher    string
-	CategoryID CategoryID
+	Name       string     `json:"name"`
+	School     string     `json:"school"`
+	Grade      string     `json:"grade"`
+	Teacher    string     `json:"teacher"`
+	CategoryID CategoryID `json:"category_id"`
 }
 
 func NewTeam(name, school, grade, teacher string, categoryID CategoryID) (*Team, error) {

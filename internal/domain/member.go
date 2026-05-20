@@ -3,18 +3,18 @@ package domain
 type MemberID int
 
 type Member struct {
-	ID		MemberID
-	Name 	string
-	Email 	string
-	IsLeader bool
-	TeamID TeamID
+	ID       MemberID `json:"id"`
+	Name     string   `json:"name"`
+	Email    string   `json:"email"`
+	IsLeader bool     `json:"is_leader"`
+	TeamID   TeamID   `json:"team_id"`
 }
 
 type MemberQuery struct {
-	Name 	string
-	Email 	string
-	IsLeader *bool
-	TeamID 	TeamID
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	IsLeader *bool  `json:"is_leader"`
+	TeamID   TeamID `json:"team_id"`
 }
 
 func NewMember(name, email string, isLeader bool, teamID TeamID) (*Member, error) {
@@ -23,9 +23,9 @@ func NewMember(name, email string, isLeader bool, teamID TeamID) (*Member, error
 	}
 
 	return &Member{
-		Name: name,
-		Email: email,
+		Name:     name,
+		Email:    email,
 		IsLeader: isLeader,
-		TeamID: teamID,
+		TeamID:   teamID,
 	}, nil
 }

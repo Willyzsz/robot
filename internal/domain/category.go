@@ -5,11 +5,10 @@ import "slices"
 type CategoryID int
 
 type Category struct {
-	ID		CategoryID
-	Name 	string
-	Rules 	[]*Rule
+	ID    CategoryID `json:"id"`
+	Name  string     `json:"name"`
+	Rules []*Rule    `json:"rules"`
 }
-
 
 func NewCategory(name string) (*Category, error) {
 	if name == "" {
@@ -17,7 +16,7 @@ func NewCategory(name string) (*Category, error) {
 	}
 
 	return &Category{
-		Name: name,
+		Name:  name,
 		Rules: []*Rule{},
 	}, nil
 }
@@ -29,14 +28,14 @@ func (c *Category) AddRule(rule *Rule) error {
 
 	if rule.CategoryID != c.ID {
 		return ErrInvalid
-	} 
+	}
 
 	if slices.ContainsFunc(c.Rules, func(r *Rule) bool {
 		return r.ID == rule.ID
 	}) {
 		return ErrAlreadyExists
 	}
-	
+
 	c.Rules = append(c.Rules, rule)
 	return nil
 }

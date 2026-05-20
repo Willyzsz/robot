@@ -3,9 +3,9 @@ package domain
 type RuleID int
 
 type Rule struct {
-	ID 			RuleID
-	Description string
-	CategoryID  CategoryID
+	ID          RuleID     `json:"id"`
+	Description string     `json:"description"`
+	CategoryID  CategoryID `json:"category_id"`
 }
 
 func NewRule(description string, categoryID CategoryID) (*Rule, error) {
@@ -15,6 +15,6 @@ func NewRule(description string, categoryID CategoryID) (*Rule, error) {
 
 	return &Rule{
 		Description: description,
-		CategoryID: categoryID,
+		CategoryID:  categoryID,
 	}, nil
 }
