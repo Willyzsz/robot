@@ -10,6 +10,7 @@ type Team struct {
 	Teacher    string     `json:"teacher"`
 	Members    []*Member  `json:"members"`
 	CategoryID CategoryID `json:"category_id"`
+	Category   string     `json:"category,omitempty"`
 }
 
 type TeamQuery struct {
@@ -26,17 +27,17 @@ func NewTeam(name, school, grade, teacher string, categoryID CategoryID) (*Team,
 		return nil, NewRobotErr(op, "", "name", name, ErrEmpty, "name cannot be empty")
 	}
 
-	if school == "" {
-		return nil, NewRobotErr(op, "", "school", school, ErrEmpty, "school cannot be empty")
-	}
+	// if school == "" {
+	// 	return nil, NewRobotErr(op, "", "school", school, ErrEmpty, "school cannot be empty")
+	// }
 
-	if grade == "" {
-		return nil, NewRobotErr(op, "", "grade", grade, ErrEmpty, "grade cannot be empty")
-	}
+	// if grade == "" {
+	// 	return nil, NewRobotErr(op, "", "grade", grade, ErrEmpty, "grade cannot be empty")
+	// }
 
-	if teacher == "" {
-		return nil, NewRobotErr(op, "", "teacher", teacher, ErrEmpty, "teacher cannot be empty")
-	}
+	// if teacher == "" {
+	// 	return nil, NewRobotErr(op, "", "teacher", teacher, ErrEmpty, "teacher cannot be empty")
+	// }
 
 	return &Team{
 		Name:       name,

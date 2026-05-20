@@ -30,3 +30,26 @@ func (svc *RobotService) GetAllTeams(ctx context.Context) ([]*domain.Team, error
 func (svc *RobotService) GetTeamById(ctx context.Context, id domain.TeamID) (*domain.Team, error) {
 	return svc.teamRepository.FindByID(ctx, id)
 }
+
+func (svc *RobotService) GetTeamsWithMembersAndCategory(ctx context.Context) ([]*domain.Team, error) {
+	teams, err := svc.teamRepository.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, team := range teams {
+		members, err := svc.memberRepository.Find(ctx, domain.MemberQuery{TeamID: team.ID})
+		if err != nil {
+			return nil, err
+		}
+		team.Members = members
+
+		category, err := svc.categoryRepository.FindByID(ctx, team.CategoryID)
+		if err != nil {
+			return nil, err
+		}
+		team.Category = category.Name
+	}
+
+	return teams, nil
+}

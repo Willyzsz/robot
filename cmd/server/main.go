@@ -28,10 +28,11 @@ func main() {
 	robotHandler := handler.NewHandler(robotService)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /registro", robotHandler.GetAllTeams)
+	mux.HandleFunc("GET /registro", robotHandler.GetAllTeamsWithMembersAndCategory)
 
+	mux.HandleFunc("GET /categorias", robotHandler.GetAllCategories)
 	log.Println("server listening on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
 		log.Fatal(err)
 	}
 }

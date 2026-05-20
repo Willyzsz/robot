@@ -38,7 +38,7 @@ func ParseRows(path string) ([]FormRow, error) {
 	}
 	defer f.Close()
 
-	sheet := f.GetSheetName(1)
+	sheet := f.GetSheetName(0)
 	return getRows(f, sheet)
 }
 
@@ -74,15 +74,14 @@ func getRows(f *excelize.File, sheet string) ([]FormRow, error) {
 func headerIndexes(headers []string) map[string]int {
 	indexes := make(map[string]int, len(headers))
 	for index, header := range headers {
-		header = strings.TrimSpace(header)
-		indexes[header] = index
+		indexes[normalizeHeader(header)] = index
 	}
 
 	return indexes
 }
 
 func cell(row []string, headers map[string]int, header string) string {
-	index, ok := headers[header]
+	index, ok := headers[normalizeHeader(header)]
 	if !ok || index >= len(row) {
 		return ""
 	}
@@ -90,10 +89,16 @@ func cell(row []string, headers map[string]int, header string) string {
 	return strings.TrimSpace(row[index])
 }
 
-func splitCell(value string) []string {
-	parts := strings.Split(value, ",")
-	values := make([]string, 0, len(parts))
+func normalizeHeader(header string) string {
+	return strings.Join(strings.Fields(header), " ")
+}
 
+func splitCell(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r'
+	})
+
+	values := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -104,4 +109,4 @@ func splitCell(value string) []string {
 	}
 
 	return values
-}
+  }
