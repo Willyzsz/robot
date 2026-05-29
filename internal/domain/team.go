@@ -1,5 +1,7 @@
 package domain
 
+import "robot/pkg/apperr"
+
 type TeamID int
 
 type Team struct {
@@ -24,19 +26,19 @@ type TeamQuery struct {
 func NewTeam(name, school, grade, teacher string, categoryID CategoryID) (*Team, error) {
 	op := "NewTeam"
 	if name == "" {
-		return nil, NewRobotErr(op, "", "name", name, ErrEmpty, "name cannot be empty")
+		return nil, apperr.Wrap(op, "name cannot be empty", ErrEmpty, apperr.Field{Name: "name", Value: name})
 	}
 
 	// if school == "" {
-	// 	return nil, NewRobotErr(op, "", "school", school, ErrEmpty, "school cannot be empty")
+	// 	return nil, apperr.Wrap(op, "school cannot be empty", ErrEmpty, apperr.Field{Name: "school", Value: school})
 	// }
 
 	// if grade == "" {
-	// 	return nil, NewRobotErr(op, "", "grade", grade, ErrEmpty, "grade cannot be empty")
+	// 	return nil, apperr.Wrap(op, "grade cannot be empty", ErrEmpty, apperr.Field{Name: "grade", Value: grade})
 	// }
 
 	// if teacher == "" {
-	// 	return nil, NewRobotErr(op, "", "teacher", teacher, ErrEmpty, "teacher cannot be empty")
+	// 	return nil, apperr.Wrap(op, "teacher cannot be empty", ErrEmpty, apperr.Field{Name: "teacher", Value: teacher})
 	// }
 
 	return &Team{
@@ -75,7 +77,7 @@ func (t *Team) ValidateMembers() error {
 	op := "ValidateMembers"
 
 	if len(t.Members) < 1 {
-		return NewRobotErr(op, "", "members", len(t.Members), ErrNotEnough, "team must have at least 1 member")
+		return apperr.Wrap(op, "team must have at least 1 member", ErrNotEnough, apperr.Field{Name: "members", Value: len(t.Members)})
 	}
 
 	leaderCount := 0
@@ -85,7 +87,7 @@ func (t *Team) ValidateMembers() error {
 		}
 	}
 	if leaderCount != 1 {
-		return NewRobotErr(op, "", "members", leaderCount, ErrInvalid, "there must be exactly one leader")
+		return apperr.Wrap(op, "there must be exactly one leader", ErrInvalid, apperr.Field{Name: "members", Value: leaderCount})
 	}
 
 	return nil

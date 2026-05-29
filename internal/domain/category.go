@@ -1,6 +1,9 @@
 package domain
 
-import "slices"
+import (
+	"robot/pkg/apperr"
+	"slices"
+)
 
 type CategoryID int
 
@@ -12,7 +15,7 @@ type Category struct {
 
 func NewCategory(name string) (*Category, error) {
 	if name == "" {
-		return nil, NewRobotErr("NewCategory", "", "name", name, ErrEmpty, "category name cannot be emtpy")
+		return nil, apperr.Wrap("NewCategory", "category name cannot be empty", ErrEmpty, apperr.Field{Name: "name", Value: name})
 	}
 
 	return &Category{

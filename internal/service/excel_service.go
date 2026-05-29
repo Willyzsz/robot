@@ -5,6 +5,7 @@ import (
 	"errors"
 	"robot/internal/domain"
 	"robot/internal/excel"
+	"robot/pkg/apperr"
 	"strings"
 )
 
@@ -201,9 +202,5 @@ func (svc *ExcelService) err(op string, err error) error {
 	if err == nil {
 		return nil
 	}
-	var robErr *domain.RobotError
-	if errors.As(err, &robErr) {
-		return domain.NewRobotErr(op, robErr.Op, robErr.Field, robErr.Value, robErr.Err, robErr.Msg)
-	}
-	return err
+	return apperr.Wrap(op, "", err)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"robot/internal/domain"
+	"robot/pkg/apperr"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -36,16 +37,16 @@ func (st *CategoryStore) Insert(ctx context.Context, category *domain.Category) 
 	if err != nil {
 		var pgxErr *pgconn.PgError
 		if errors.As(err, &pgxErr) && pgxErr.Code == UniqueViolation {
-			return 0, domain.NewRobotErr(op, "", "name", category.Name, domain.ErrAlreadyExists, "category already exists with name")
+			return 0, apperr.Wrap(op, "category already exists with name", domain.ErrAlreadyExists, apperr.Field{Name: "name", Value: category.Name})
 		}
-		return 0, domain.NewRobotErr(op, "", "database", category.Name, err, "unexpected error inserting category")
+		return 0, apperr.Wrap(op, "unexpected error inserting category", err, apperr.Field{Name: "database", Value: category.Name})
 	}
 	return id, nil
 }
 
 func (st *CategoryStore) FindByID(ctx context.Context, id domain.CategoryID) (*domain.Category, error) {
 	op := "FindByID"
-	
+
 	query := `
 		SELECT id, name
 		FROM category
@@ -57,9 +58,9 @@ func (st *CategoryStore) FindByID(ctx context.Context, id domain.CategoryID) (*d
 	err := st.store.db.QueryRow(ctx, query, id).Scan(&foundID, &name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.NewRobotErr(op, "", "id", id, domain.ErrNotFound, "")
+			return nil, apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "id", Value: id})
 		}
-		return nil, domain.NewRobotErr(op, "", "id", id, err, "unexpected error selecting id")
+		return nil, apperr.Wrap(op, "unexpected error selecting id", err, apperr.Field{Name: "id", Value: id})
 	}
 
 	category, err := domain.NewCategory(name)
@@ -70,10 +71,9 @@ func (st *CategoryStore) FindByID(ctx context.Context, id domain.CategoryID) (*d
 	return category, nil
 }
 
-
 func (st *CategoryStore) FindByName(ctx context.Context, name string) (*domain.Category, error) {
 	op := "FindByName"
-	
+
 	query := `
 		SELECT id, name
 		FROM category
@@ -85,9 +85,9 @@ func (st *CategoryStore) FindByName(ctx context.Context, name string) (*domain.C
 	err := st.store.db.QueryRow(ctx, query, name).Scan(&id, &foundName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.NewRobotErr(op, "", "name", name, domain.ErrNotFound, "")
+			return nil, apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "name", Value: name})
 		}
-		return nil, domain.NewRobotErr(op, "", "name", name, err, "unexpected error selecting name")
+		return nil, apperr.Wrap(op, "unexpected error selecting name", err, apperr.Field{Name: "name", Value: name})
 	}
 
 	category, err := domain.NewCategory(foundName)
@@ -100,14 +100,14 @@ func (st *CategoryStore) FindByName(ctx context.Context, name string) (*domain.C
 
 func (st *CategoryStore) FindAll(ctx context.Context) ([]*domain.Category, error) {
 	op := "FindAll"
-	
+
 	query := `
 		SELECT id, name
 		FROM category
 	`
 	rows, err := st.store.db.Query(ctx, query)
 	if err != nil {
-		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error listing categories")
+		return nil, apperr.Wrap(op, "unexpected error listing categories", err, apperr.Field{Name: "database", Value: ""})
 	}
 
 	categories, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Category, error) {
@@ -116,7 +116,7 @@ func (st *CategoryStore) FindAll(ctx context.Context) ([]*domain.Category, error
 
 		err := row.Scan(&id, &name)
 		if err != nil {
-			return nil, domain.NewRobotErr(op, "", "scan", row, err, "something went wrong when scanning")
+			return nil, apperr.Wrap(op, "something went wrong when scanning", err, apperr.Field{Name: "scan", Value: row})
 		}
 		category, err := domain.NewCategory(name)
 		if err != nil {
@@ -126,7 +126,7 @@ func (st *CategoryStore) FindAll(ctx context.Context) ([]*domain.Category, error
 		return category, nil
 	})
 	if err != nil {
-		return nil, domain.NewRobotErr(op, "", "collect", rows, err, "unexpected error collecting categories")
+		return nil, apperr.Wrap(op, "unexpected error collecting categories", err, apperr.Field{Name: "collect", Value: rows})
 	}
 
 	return categories, nil

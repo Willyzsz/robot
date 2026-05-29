@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"robot/internal/domain"
+	"robot/pkg/apperr"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -31,14 +32,14 @@ func (st *MemberStore) Insert(ctx context.Context, member *domain.Member, teamID
 	`
 
 	var id domain.MemberID
-	err := st.store.db.QueryRow(ctx, query, 
+	err := st.store.db.QueryRow(ctx, query,
 		member.Name,
 		member.Email,
 		member.IsLeader,
 		teamID,
 	).Scan(&id)
 	if err != nil {
-		return 0, domain.NewRobotErr("Insert", "", "database", member.Name, err, "unexpected error inserting member")
+		return 0, apperr.Wrap("Insert", "unexpected error inserting member", err, apperr.Field{Name: "database", Value: member.Name})
 	}
 
 	return id, nil
@@ -67,9 +68,9 @@ func (st *MemberStore) FindByID(ctx context.Context, id domain.MemberID) (*domai
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.NewRobotErr(op, "", "id", id, domain.ErrNotFound, "")
+			return nil, apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "id", Value: id})
 		}
-		return nil, domain.NewRobotErr(op, "", "database", id, err, "unexpected error Selecting ID")
+		return nil, apperr.Wrap(op, "unexpected error selecting id", err, apperr.Field{Name: "database", Value: id})
 	}
 
 	member, err := domain.NewMember(memberName, memberEmail, isLeader, teamID)
@@ -87,9 +88,9 @@ func (st *MemberStore) Find(ctx context.Context, q domain.MemberQuery) ([]*domai
 
 	rows, err := st.store.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error finding members")
+		return nil, apperr.Wrap(op, "unexpected error finding members", err, apperr.Field{Name: "database", Value: ""})
 	}
-	
+
 	members, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Member, error) {
 		var foundID domain.MemberID
 		var memberName, memberEmail string
@@ -104,7 +105,7 @@ func (st *MemberStore) Find(ctx context.Context, q domain.MemberQuery) ([]*domai
 			&teamID,
 		)
 		if err != nil {
-			return nil, domain.NewRobotErr(op, "", "scan", row, err, "unexpected error scanning member")
+			return nil, apperr.Wrap(op, "unexpected error scanning member", err, apperr.Field{Name: "scan", Value: row})
 		}
 
 		member, err := domain.NewMember(memberName, memberEmail, isLeader, teamID)
@@ -115,7 +116,7 @@ func (st *MemberStore) Find(ctx context.Context, q domain.MemberQuery) ([]*domai
 		return member, nil
 	})
 	if err != nil {
-		return nil, domain.NewRobotErr(op, "", "database", "", err, "unexpected error collecting members")
+		return nil, apperr.Wrap(op, "unexpected error collecting members", err, apperr.Field{Name: "database", Value: ""})
 	}
 
 	return members, nil

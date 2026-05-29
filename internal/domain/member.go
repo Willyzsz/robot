@@ -1,5 +1,7 @@
 package domain
 
+import "robot/pkg/apperr"
+
 type MemberID int
 
 type Member struct {
@@ -19,7 +21,7 @@ type MemberQuery struct {
 
 func NewMember(name, email string, isLeader bool, teamID TeamID) (*Member, error) {
 	if name == "" {
-		return nil, NewRobotErr("NewMember", "", "name", name, ErrEmpty, "member name cannot be empty")
+		return nil, apperr.Wrap("NewMember", "member name cannot be empty", ErrEmpty, apperr.Field{Name: "name", Value: name})
 	}
 
 	return &Member{

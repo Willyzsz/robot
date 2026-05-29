@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	UniqueViolation string = "23505"
+	UniqueViolation     string = "23505"
 	ForeignKeyViolation string = "23503"
+	CheckViolation      string = "23514"
 )
 
 type Store struct {
@@ -29,7 +30,6 @@ func ConnStringFromEnv() (string, error) {
 	host := os.Getenv("POSTGRES_HOST")
 	port := os.Getenv("POSTGRES_PORT")
 	db := os.Getenv("POSTGRES_DB")
-
 
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
