@@ -70,3 +70,21 @@ CREATE TABLE IF NOT EXISTS result (
     CONSTRAINT fk_result_match
         FOREIGN KEY (match_id) REFERENCES "match"(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS robot (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL,
+    is_valid BOOLEAN NOT NULL DEFAULT false,
+    CONSTRAINT fk_robot_team
+        FOREIGN KEY (team_id) REFERENCES team(id)
+);
+
+CREATE TABLE IF NOT EXISTS robot_valid_rule (
+    robot_id INTEGER NOT NULL,
+    rule_id INTEGER NOT NULL,
+    PRIMARY KEY (robot_id, rule_id),
+    CONSTRAINT fk_robot_valid_rule_robot
+        FOREIGN KEY (robot_id) REFERENCES robot(id) ON DELETE CASCADE,
+    CONSTRAINT fk_robot_valid_rule_rule
+        FOREIGN KEY (rule_id) REFERENCES rule(id)
+);

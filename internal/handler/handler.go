@@ -13,6 +13,30 @@ type Handler struct {
 	robotService *service.RobotService
 }
 
+type createCategoryRequest struct {
+	Name string `json:"name"`
+}
+
+type createRuleRequest struct {
+	Description string            `json:"description"`
+	CategoryID  domain.CategoryID `json:"category_id"`
+}
+
+type createTeamRequest struct {
+	Name       string            `json:"name"`
+	School     string            `json:"school"`
+	Grade      string            `json:"grade"`
+	Teacher    string            `json:"teacher"`
+	CategoryID domain.CategoryID `json:"category_id"`
+}
+
+type createMemberRequest struct {
+	Name     string        `json:"name"`
+	Email    string        `json:"email"`
+	IsLeader bool          `json:"is_leader"`
+	TeamID   domain.TeamID `json:"team_id"`
+}
+
 type createMatchRequest struct {
 	TeamAID domain.TeamID   `json:"team_a_id"`
 	TeamBID domain.TeamID   `json:"team_b_id"`
@@ -22,6 +46,15 @@ type createMatchRequest struct {
 type createResultRequest struct {
 	Winner domain.TeamID `json:"winner"`
 	Time   *time.Time    `json:"time,omitempty"`
+}
+
+type createRobotRequest struct {
+	TeamID     domain.TeamID   `json:"team_id"`
+	ValidRules []domain.RuleID `json:"valid_rules"`
+}
+
+type verifyRobotRequest struct {
+	RuleID domain.RuleID `json:"rule_id"`
 }
 
 type createResponse struct {
@@ -74,6 +107,146 @@ func (h *Handler) GetAllCategories(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(categories); err != nil {
 		return
 	}
+}
+
+func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req createCategoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid category payload", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.robotService.CreateCategory(r.Context(), req.Name)
+	if err != nil {
+		http.Error(w, "Failed to create category", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req createRuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid rule payload", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.robotService.CreateRule(r.Context(), req.Description, req.CategoryID)
+	if err != nil {
+		http.Error(w, "Failed to create rule", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) GetRulesByCategoryID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("category_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+
+	rules, err := h.robotService.GetRulesByCategoryID(r.Context(), domain.CategoryID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve rules", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, rules)
+}
+
+func (h *Handler) CreateTeam(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req createTeamRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid team payload", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.robotService.CreateTeam(r.Context(), req.Name, req.School, req.Grade, req.Teacher, req.CategoryID)
+	if err != nil {
+		http.Error(w, "Failed to create team", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) GetTeamsByCategoryID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("category_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+
+	teams, err := h.robotService.GetTeamsByCategoryID(r.Context(), domain.CategoryID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve teams", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, teams)
+}
+
+func (h *Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req createMemberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid member payload", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.robotService.CreateMember(r.Context(), req.Name, req.Email, req.IsLeader, req.TeamID)
+	if err != nil {
+		http.Error(w, "Failed to create member", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) GetMembersByTeamID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("team_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid team id", http.StatusBadRequest)
+		return
+	}
+
+	members, err := h.robotService.GetMembersByTeamID(r.Context(), domain.TeamID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve members", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, members)
 }
 
 func (h *Handler) GetAllMatches(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +361,105 @@ func (h *Handler) GetResultByMatchID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetAllRobots(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	robots, err := h.robotService.GetAllRobots(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to retrieve robots", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, robots)
+}
+
+func (h *Handler) CreateRobot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req createRobotRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid robot payload", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.robotService.CreateRobot(r.Context(), req.TeamID, req.ValidRules)
+	if err != nil {
+		http.Error(w, "Failed to create robot", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) GetRobotByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid robot id", http.StatusBadRequest)
+		return
+	}
+
+	robot, err := h.robotService.GetRobotByID(r.Context(), domain.RobotID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve robot", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, robot)
+}
+
+func (h *Handler) GetRobotsByTeamID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("team_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid team id", http.StatusBadRequest)
+		return
+	}
+
+	robots, err := h.robotService.GetRobotsByTeamID(r.Context(), domain.TeamID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve robots", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, robots)
+}
+
+func (h *Handler) VerifyRobot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid robot id", http.StatusBadRequest)
+		return
+	}
+
+	var req verifyRobotRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid verification payload", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.robotService.VerifyRobot(r.Context(), domain.RobotID(id), req.RuleID); err != nil {
+		http.Error(w, "Failed to verify robot", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

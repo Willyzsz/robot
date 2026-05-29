@@ -19,6 +19,22 @@ type CategoryRepository interface {
 	FindAll(ctx context.Context) ([]*Category, error)
 }
 
+type RuleRepository interface {
+	// Insert adds a new rule to the repository and returns its ID.
+	// Returns an error wrapping ErrInvalidReference if category_id does not reference an existing category.
+	Insert(ctx context.Context, rule *Rule) (RuleID, error)
+
+	// FindByID retrieves a rule by its ID.
+	// Returns an error wrapping ErrNotFound if no rule with the given ID exists.
+	FindByID(ctx context.Context, id RuleID) (*Rule, error)
+
+	// FindByCategoryID retrieves all rules for the given category.
+	FindByCategoryID(ctx context.Context, id CategoryID) ([]*Rule, error)
+
+	// FindAll retrieves all rules from the repository.
+	FindAll(ctx context.Context) ([]*Rule, error)
+}
+
 type TeamRepository interface {
 	// Insert adds a new team to the repository and returns its ID.
 	// Returns an error wrapping ErrAlreadyExists if a team with the same name already exists.
@@ -91,4 +107,26 @@ type ResultRepository interface {
 
 	// FindAll retrieves all results from the repository.
 	FindAll(ctx context.Context) ([]*Result, error)
+}
+
+type RobotRepository interface {
+	// Insert adds a new robot to the repository and returns its ID.
+	// Returns an error wrapping ErrInvalidReference if team_id or any valid rule_id does not reference an existing row.
+	Insert(ctx context.Context, robot *Robot) (RobotID, error)
+
+	// FindByID retrieves a robot by its ID.
+	// Returns an error wrapping ErrNotFound if no robot with the given ID exists.
+	FindByID(ctx context.Context, id RobotID) (*Robot, error)
+
+	// Find retrieves all robots from the given query.
+	Find(ctx context.Context, q RobotQuery) ([]*Robot, error)
+
+	// FindAll retrieves all robots from the repository.
+	FindAll(ctx context.Context) ([]*Robot, error)
+
+	// AddValidRule records that a robot was valid under a rule.
+	AddValidRule(ctx context.Context, robotID RobotID, ruleID RuleID) error
+
+	// SetValidity updates the final robot validity.
+	SetValidity(ctx context.Context, robotID RobotID, isValid bool) error
 }
