@@ -6,11 +6,17 @@ import (
 )
 
 type MatchID int
+type MatchMode string
+
+const (
+	MatchModePairwise MatchMode = "pairwise"
+	MatchModeShared   MatchMode = "shared"
+)
 
 type Match struct {
 	ID         MatchID    `json:"id"`
-	TeamA      Team       `json:"team_a"`
-	TeamB      Team       `json:"team_b"`
+	TeamA      *Team      `json:"team_a,omitempty"`
+	TeamB      *Team      `json:"team_b,omitempty"`
 	Queue      []TeamID   `json:"queue,omitempty"`
 	CategoryID CategoryID `json:"category_id"`
 	Result     *Result    `json:"result,omitempty"`
@@ -23,7 +29,11 @@ type MatchQuery struct {
 }
 
 func NewMatch(teamA, teamB Team, categoryID CategoryID) (*Match, error) {
-	op := "NewMatch"
+	return NewPairMatch(teamA, teamB, categoryID)
+}
+
+func NewPairMatch(teamA, teamB Team, categoryID CategoryID) (*Match, error) {
+	op := "NewPairMatch"
 	if teamA.ID == 0 {
 		return nil, apperr.Wrap(op, "team_a cannot be empty", ErrEmpty, apperr.Field{Name: "team_a", Value: teamA.ID})
 	}
@@ -41,18 +51,49 @@ func NewMatch(teamA, teamB Team, categoryID CategoryID) (*Match, error) {
 	}
 
 	return &Match{
-		TeamA:      teamA,
-		TeamB:      teamB,
+		TeamA:      &teamA,
+		TeamB:      &teamB,
 		Queue:      []TeamID{},
 		CategoryID: categoryID,
 	}, nil
+}
+
+func NewQueueMatch(categoryID CategoryID, teams []Team) (*Match, error) {
+	op := "NewQueueMatch"
+	if categoryID == 0 {
+		return nil, apperr.Wrap(op, "category_id cannot be empty", ErrEmpty, apperr.Field{Name: "category_id", Value: categoryID})
+	}
+	if len(teams) == 0 {
+		return nil, apperr.Wrap(op, "queue must have at least one team", ErrNotEnough)
+	}
+
+	match := &Match{
+		Queue:      []TeamID{},
+		CategoryID: categoryID,
+	}
+	for _, team := range teams {
+		if team.ID == 0 {
+			return nil, apperr.Wrap(op, "team cannot be empty", ErrEmpty, apperr.Field{Name: "team", Value: team.ID})
+		}
+		if team.CategoryID != categoryID {
+			return nil, apperr.Wrap(op, "team must belong to the match category", ErrInvalid, apperr.Field{Name: "team", Value: team.ID})
+		}
+		if slices.Contains(match.Queue, team.ID) {
+			return nil, apperr.Wrap(op, "team is already in the queue", ErrAlreadyExists, apperr.Field{Name: "team", Value: team.ID})
+		}
+		match.Queue = append(match.Queue, team.ID)
+	}
+	return match, nil
 }
 
 func (m *Match) AddToQueue(team Team) error {
 	if team.CategoryID != m.CategoryID {
 		return apperr.Wrap("AddToQueue", "team must belong to the match category", ErrInvalid, apperr.Field{Name: "team", Value: team.ID})
 	}
-	if team.ID == m.TeamA.ID || team.ID == m.TeamB.ID {
+	if m.TeamA != nil && team.ID == m.TeamA.ID {
+		return apperr.Wrap("AddToQueue", "team is already in the match", ErrAlreadyExists, apperr.Field{Name: "team", Value: team.ID})
+	}
+	if m.TeamB != nil && team.ID == m.TeamB.ID {
 		return apperr.Wrap("AddToQueue", "team is already in the match", ErrAlreadyExists, apperr.Field{Name: "team", Value: team.ID})
 	}
 	if slices.Contains(m.Queue, team.ID) {
@@ -64,7 +105,10 @@ func (m *Match) AddToQueue(team Team) error {
 }
 
 func (m *Match) RemoveFromQueue(team Team) error {
-	if team.ID == m.TeamA.ID || team.ID == m.TeamB.ID {
+	if m.TeamA != nil && team.ID == m.TeamA.ID {
+		return apperr.Wrap("RemoveFromQueue", "team is currently in the match", ErrInvalid, apperr.Field{Name: "team", Value: team.ID})
+	}
+	if m.TeamB != nil && team.ID == m.TeamB.ID {
 		return apperr.Wrap("RemoveFromQueue", "team is currently in the match", ErrInvalid, apperr.Field{Name: "team", Value: team.ID})
 	}
 
@@ -79,6 +123,12 @@ func (m *Match) RemoveFromQueue(team Team) error {
 }
 
 func (m *Match) StartMatch() error {
+	if m.TeamA == nil || m.TeamB == nil {
+		if len(m.Queue) == 0 {
+			return apperr.Wrap("StartMatch", "match requires queued teams", ErrNotEnough)
+		}
+		return nil
+	}
 	if m.TeamA.ID == 0 || m.TeamB.ID == 0 {
 		return apperr.Wrap("StartMatch", "match requires two teams", ErrNotEnough, apperr.Field{Name: "team_a", Value: m.TeamA.ID}, apperr.Field{Name: "team_b", Value: m.TeamB.ID})
 	}
@@ -95,9 +145,23 @@ func (m *Match) SetResult(result *Result) error {
 	if m.ID != 0 && result.MatchID != m.ID {
 		return apperr.Wrap("SetResult", "result does not belong to match", ErrInvalid, apperr.Field{Name: "match_id", Value: result.MatchID})
 	}
-	if result.Winner != m.TeamA.ID && result.Winner != m.TeamB.ID {
+	if !m.hasTeam(result.Winner) {
 		return apperr.Wrap("SetResult", "winner must be one of the match teams", ErrInvalid, apperr.Field{Name: "winner", Value: result.Winner})
 	}
 	m.Result = result
 	return nil
+}
+
+func (m *Match) hasTeam(teamID TeamID) bool {
+	if m.TeamA != nil && m.TeamA.ID == teamID {
+		return true
+	}
+	if m.TeamB != nil && m.TeamB.ID == teamID {
+		return true
+	}
+	return slices.Contains(m.Queue, teamID)
+}
+
+func (mode MatchMode) Valid() bool {
+	return mode == MatchModePairwise || mode == MatchModeShared
 }

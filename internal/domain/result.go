@@ -40,7 +40,7 @@ func NewResultForMatch(match *Match, winner TeamID, resultTime *time.Time) (*Res
 	if match == nil {
 		return nil, apperr.Wrap(op, "match cannot be nil", ErrInvalid)
 	}
-	if winner != match.TeamA.ID && winner != match.TeamB.ID {
+	if !match.hasTeam(winner) {
 		return nil, apperr.Wrap(op, "winner must be one of the match teams", ErrInvalid, apperr.Field{Name: "winner", Value: winner})
 	}
 

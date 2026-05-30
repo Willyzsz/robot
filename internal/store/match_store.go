@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"robot/internal/domain"
@@ -41,8 +42,8 @@ func (st *MatchStore) Insert(ctx context.Context, match *domain.Match) (domain.M
 
 	var id domain.MatchID
 	err = tx.QueryRow(ctx, query,
-		match.TeamA.ID,
-		match.TeamB.ID,
+		matchTeamID(match.TeamA),
+		matchTeamID(match.TeamB),
 		match.CategoryID,
 	).Scan(&id)
 	if err != nil {
@@ -222,34 +223,66 @@ type matchRow interface {
 func scanMatch(row matchRow) (*domain.Match, error) {
 	var id domain.MatchID
 	var categoryID domain.CategoryID
-	var teamA domain.Team
-	var teamB domain.Team
+	var teamAID sql.NullInt64
+	var teamAName sql.NullString
+	var teamASchool sql.NullString
+	var teamAGrade sql.NullString
+	var teamATeacher sql.NullString
+	var teamACategoryID sql.NullInt64
+	var teamBID sql.NullInt64
+	var teamBName sql.NullString
+	var teamBSchool sql.NullString
+	var teamBGrade sql.NullString
+	var teamBTeacher sql.NullString
+	var teamBCategoryID sql.NullInt64
 
 	err := row.Scan(
 		&id,
 		&categoryID,
-		&teamA.ID,
-		&teamA.Name,
-		&teamA.School,
-		&teamA.Grade,
-		&teamA.Teacher,
-		&teamA.CategoryID,
-		&teamB.ID,
-		&teamB.Name,
-		&teamB.School,
-		&teamB.Grade,
-		&teamB.Teacher,
-		&teamB.CategoryID,
+		&teamAID,
+		&teamAName,
+		&teamASchool,
+		&teamAGrade,
+		&teamATeacher,
+		&teamACategoryID,
+		&teamBID,
+		&teamBName,
+		&teamBSchool,
+		&teamBGrade,
+		&teamBTeacher,
+		&teamBCategoryID,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	match, err := domain.NewMatch(teamA, teamB, categoryID)
-	if err != nil {
-		return nil, err
+	match := &domain.Match{
+		ID:         id,
+		Queue:      []domain.TeamID{},
+		CategoryID: categoryID,
 	}
-	match.ID = id
+
+	if teamAID.Valid {
+		match.TeamA = &domain.Team{
+			ID:         domain.TeamID(teamAID.Int64),
+			Name:       teamAName.String,
+			School:     teamASchool.String,
+			Grade:      teamAGrade.String,
+			Teacher:    teamATeacher.String,
+			CategoryID: domain.CategoryID(teamACategoryID.Int64),
+		}
+	}
+	if teamBID.Valid {
+		match.TeamB = &domain.Team{
+			ID:         domain.TeamID(teamBID.Int64),
+			Name:       teamBName.String,
+			School:     teamBSchool.String,
+			Grade:      teamBGrade.String,
+			Teacher:    teamBTeacher.String,
+			CategoryID: domain.CategoryID(teamBCategoryID.Int64),
+		}
+	}
+
 	return match, nil
 }
 
@@ -271,7 +304,14 @@ func matchSelectQuery() string {
 			tb.teacher,
 			tb.category_id
 		FROM "match" m
-		JOIN team ta ON ta.id = m.team_a_id
-		JOIN team tb ON tb.id = m.team_b_id
+		LEFT JOIN team ta ON ta.id = m.team_a_id
+		LEFT JOIN team tb ON tb.id = m.team_b_id
 	`
+}
+
+func matchTeamID(team *domain.Team) any {
+	if team == nil {
+		return nil
+	}
+	return team.ID
 }

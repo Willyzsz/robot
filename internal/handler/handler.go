@@ -2,9 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log"
 	"net/http"
 	"robot/internal/domain"
 	"robot/internal/service"
+	"robot/pkg/apperr"
 	"strconv"
 	"time"
 )
@@ -19,6 +23,7 @@ type createCategoryRequest struct {
 
 type createRuleRequest struct {
 	Description string            `json:"description"`
+	Type        domain.RuleType   `json:"type"`
 	CategoryID  domain.CategoryID `json:"category_id"`
 }
 
@@ -41,6 +46,10 @@ type createMatchRequest struct {
 	TeamAID domain.TeamID   `json:"team_a_id"`
 	TeamBID domain.TeamID   `json:"team_b_id"`
 	Queue   []domain.TeamID `json:"queue"`
+}
+
+type startMatchQueueRequest struct {
+	Mode domain.MatchMode `json:"mode"`
 }
 
 type createResultRequest struct {
@@ -86,6 +95,26 @@ func (h *Handler) GetAllTeamsWithMembersAndCategory(w http.ResponseWriter, r *ht
 	if err := json.NewEncoder(w).Encode(teams); err != nil {
 		return
 	}
+}
+
+func (h *Handler) GetTeamsWithMembersByCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("category_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+
+	teams, err := h.robotService.GetTeamsWithMembersByCategory(r.Context(), domain.CategoryID(id))
+	if err != nil {
+		http.Error(w, "Failed to retrieve teams", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, teams)
 }
 
 func (h *Handler) GetAllCategories(w http.ResponseWriter, r *http.Request) {
@@ -141,9 +170,9 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.robotService.CreateRule(r.Context(), req.Description, req.CategoryID)
+	id, err := h.robotService.CreateRule(r.Context(), req.Description, req.Type, req.CategoryID)
 	if err != nil {
-		http.Error(w, "Failed to create rule", http.StatusInternalServerError)
+		handleError(w, r, "Failed to create rule", err, req)
 		return
 	}
 	writeJSON(w, http.StatusCreated, createResponse{ID: id})
@@ -281,6 +310,32 @@ func (h *Handler) CreateMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, createResponse{ID: id})
+}
+
+func (h *Handler) StartMatchQueue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("category_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+
+	var req startMatchQueueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "invalid match queue payload", http.StatusBadRequest)
+		return
+	}
+
+	matches, err := h.robotService.StartMatchQueue(r.Context(), domain.CategoryID(id), req.Mode)
+	if err != nil {
+		handleError(w, r, "Failed to start match queue", err, req)
+		return
+	}
+	writeJSON(w, http.StatusCreated, matches)
 }
 
 func (h *Handler) GetMatchByID(w http.ResponseWriter, r *http.Request) {
@@ -466,4 +521,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func handleError(w http.ResponseWriter, r *http.Request, msg string, err error, payload any) {
+	status := statusForError(err)
+	formatted := apperr.Format(err)
+	log.Printf("%s %s failed -> %d payload=%+v err=%s", r.Method, r.URL.Path, status, payload, formatted)
+	http.Error(w, msg+": "+formatted, status)
+}
+
+func statusForError(err error) int {
+	switch {
+	case errors.Is(err, domain.ErrEmpty), errors.Is(err, domain.ErrInvalid), errors.Is(err, domain.ErrInvalidReference), errors.Is(err, domain.ErrNotEnough):
+		return http.StatusBadRequest
+	case errors.Is(err, domain.ErrAlreadyExists):
+		return http.StatusConflict
+	case errors.Is(err, domain.ErrNotFound):
+		return http.StatusNotFound
+	default:
+		return http.StatusInternalServerError
+	}
 }

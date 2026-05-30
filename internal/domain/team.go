@@ -11,6 +11,7 @@ type Team struct {
 	Grade      string     `json:"grade"`
 	Teacher    string     `json:"teacher"`
 	Members    []*Member  `json:"members"`
+	RobotValid bool       `json:"robot_valid"`
 	CategoryID CategoryID `json:"category_id"`
 	Category   string     `json:"category,omitempty"`
 }

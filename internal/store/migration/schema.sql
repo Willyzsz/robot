@@ -6,10 +6,29 @@ CREATE TABLE IF NOT EXISTS category (
 CREATE TABLE IF NOT EXISTS rule (
     id SERIAL PRIMARY KEY,
     description TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'characteristic',
     category_id INTEGER NOT NULL,
+    CONSTRAINT chk_rule_type
+        CHECK (type IN ('characteristic', 'restriction')),
     CONSTRAINT fk_category 
         FOREIGN KEY (category_id) REFERENCES category(id)
 );
+
+ALTER TABLE rule
+    ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'characteristic';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_rule_type'
+    ) THEN
+        ALTER TABLE rule
+            ADD CONSTRAINT chk_rule_type
+            CHECK (type IN ('characteristic', 'restriction'));
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS team (
     id SERIAL PRIMARY KEY,
@@ -34,8 +53,8 @@ CREATE TABLE IF NOT EXISTS member (
 
 CREATE TABLE IF NOT EXISTS "match" (
     id SERIAL PRIMARY KEY,
-    team_a_id INTEGER NOT NULL,
-    team_b_id INTEGER NOT NULL,
+    team_a_id INTEGER,
+    team_b_id INTEGER,
     category_id INTEGER NOT NULL,
     CONSTRAINT fk_match_team_a
         FOREIGN KEY (team_a_id) REFERENCES team(id),
@@ -46,6 +65,10 @@ CREATE TABLE IF NOT EXISTS "match" (
     CONSTRAINT chk_match_distinct_teams
         CHECK (team_a_id <> team_b_id)
 );
+
+ALTER TABLE "match"
+    ALTER COLUMN team_a_id DROP NOT NULL,
+    ALTER COLUMN team_b_id DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS match_queue (
     match_id INTEGER NOT NULL,

@@ -27,13 +27,13 @@ func (st *RuleStore) Insert(ctx context.Context, rule *domain.Rule) (domain.Rule
 
 	query := `
 		INSERT INTO rule
-		(description, category_id)
-		VALUES ($1, $2)
+		(description, type, category_id)
+		VALUES ($1, $2, $3)
 		RETURNING id
 	`
 
 	var id domain.RuleID
-	err := st.store.db.QueryRow(ctx, query, rule.Description, rule.CategoryID).Scan(&id)
+	err := st.store.db.QueryRow(ctx, query, rule.Description, rule.Type, rule.CategoryID).Scan(&id)
 	if err != nil {
 		var pgxErr *pgconn.PgError
 		if errors.As(err, &pgxErr) && pgxErr.Code == ForeignKeyViolation {
@@ -49,7 +49,7 @@ func (st *RuleStore) FindByID(ctx context.Context, id domain.RuleID) (*domain.Ru
 	op := "FindByID"
 
 	query := `
-		SELECT id, description, category_id
+		SELECT id, description, type, category_id
 		FROM rule
 		WHERE id = $1
 	`
@@ -66,7 +66,7 @@ func (st *RuleStore) FindByID(ctx context.Context, id domain.RuleID) (*domain.Ru
 
 func (st *RuleStore) FindByCategoryID(ctx context.Context, id domain.CategoryID) ([]*domain.Rule, error) {
 	return st.find(ctx, `
-		SELECT id, description, category_id
+		SELECT id, description, type, category_id
 		FROM rule
 		WHERE category_id = $1
 	`, id)
@@ -74,7 +74,7 @@ func (st *RuleStore) FindByCategoryID(ctx context.Context, id domain.CategoryID)
 
 func (st *RuleStore) FindAll(ctx context.Context) ([]*domain.Rule, error) {
 	return st.find(ctx, `
-		SELECT id, description, category_id
+		SELECT id, description, type, category_id
 		FROM rule
 	`)
 }
@@ -103,13 +103,14 @@ type ruleRow interface {
 func scanRule(row ruleRow) (*domain.Rule, error) {
 	var id domain.RuleID
 	var description string
+	var ruleType domain.RuleType
 	var categoryID domain.CategoryID
 
-	if err := row.Scan(&id, &description, &categoryID); err != nil {
+	if err := row.Scan(&id, &description, &ruleType, &categoryID); err != nil {
 		return nil, err
 	}
 
-	rule, err := domain.NewRule(description, categoryID)
+	rule, err := domain.NewRule(description, ruleType, categoryID)
 	if err != nil {
 		return nil, err
 	}

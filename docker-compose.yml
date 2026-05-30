@@ -2,6 +2,14 @@ services:
   postgres:
     image: postgres:16
     container_name: robot-postgres
+    command:
+      - postgres
+      - -c
+      - log_statement=all
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       

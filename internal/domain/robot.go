@@ -9,6 +9,7 @@ type Robot struct {
 	TeamID     TeamID   `json:"team_id"`
 	IsValid    bool     `json:"is_valid"`
 	ValidRules []RuleID `json:"valid_rules,omitempty"`
+	Rules      []*Rule  `json:"rules,omitempty"`
 }
 
 type RobotQuery struct {
