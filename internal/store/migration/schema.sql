@@ -56,6 +56,11 @@ CREATE TABLE IF NOT EXISTS "match" (
     team_a_id INTEGER,
     team_b_id INTEGER,
     category_id INTEGER NOT NULL,
+    bracket_id TEXT,
+    bracket_key TEXT,
+    bracket_round INTEGER,
+    bracket_slot INTEGER,
+    status TEXT NOT NULL DEFAULT 'ready',
     CONSTRAINT fk_match_team_a
         FOREIGN KEY (team_a_id) REFERENCES team(id),
     CONSTRAINT fk_match_team_b
@@ -63,12 +68,34 @@ CREATE TABLE IF NOT EXISTS "match" (
     CONSTRAINT fk_match_category
         FOREIGN KEY (category_id) REFERENCES category(id),
     CONSTRAINT chk_match_distinct_teams
-        CHECK (team_a_id <> team_b_id)
+        CHECK (team_a_id <> team_b_id),
+    CONSTRAINT chk_match_status
+        CHECK (status IN ('pending', 'ready', 'completed', 'bye'))
 );
 
 ALTER TABLE "match"
     ALTER COLUMN team_a_id DROP NOT NULL,
     ALTER COLUMN team_b_id DROP NOT NULL;
+
+ALTER TABLE "match"
+    ADD COLUMN IF NOT EXISTS bracket_id TEXT,
+    ADD COLUMN IF NOT EXISTS bracket_key TEXT,
+    ADD COLUMN IF NOT EXISTS bracket_round INTEGER,
+    ADD COLUMN IF NOT EXISTS bracket_slot INTEGER,
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ready';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_match_status'
+    ) THEN
+        ALTER TABLE "match"
+            ADD CONSTRAINT chk_match_status
+            CHECK (status IN ('pending', 'ready', 'completed', 'bye'));
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS match_queue (
     match_id INTEGER NOT NULL,

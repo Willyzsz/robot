@@ -86,6 +86,9 @@ type MatchRepository interface {
 
 	// FindAll retrieves all matches from the repository.
 	FindAll(ctx context.Context) ([]*Match, error)
+
+	// SetStatus updates a match status.
+	SetStatus(ctx context.Context, id MatchID, status MatchStatus) error
 }
 
 type ResultRepository interface {

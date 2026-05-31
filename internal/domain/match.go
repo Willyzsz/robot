@@ -7,19 +7,30 @@ import (
 
 type MatchID int
 type MatchMode string
+type MatchStatus string
 
 const (
 	MatchModePairwise MatchMode = "pairwise"
 	MatchModeShared   MatchMode = "shared"
+
+	MatchStatusPending   MatchStatus = "pending"
+	MatchStatusReady     MatchStatus = "ready"
+	MatchStatusCompleted MatchStatus = "completed"
+	MatchStatusBye       MatchStatus = "bye"
 )
 
 type Match struct {
-	ID         MatchID    `json:"id"`
-	TeamA      *Team      `json:"team_a,omitempty"`
-	TeamB      *Team      `json:"team_b,omitempty"`
-	Queue      []TeamID   `json:"queue,omitempty"`
-	CategoryID CategoryID `json:"category_id"`
-	Result     *Result    `json:"result,omitempty"`
+	ID           MatchID     `json:"id"`
+	TeamA        *Team       `json:"team_a,omitempty"`
+	TeamB        *Team       `json:"team_b,omitempty"`
+	Queue        []TeamID    `json:"queue,omitempty"`
+	CategoryID   CategoryID  `json:"category_id"`
+	BracketID    string      `json:"bracket_id,omitempty"`
+	BracketKey   string      `json:"bracket_key,omitempty"`
+	BracketRound int         `json:"bracket_round,omitempty"`
+	BracketSlot  int         `json:"bracket_slot,omitempty"`
+	Status       MatchStatus `json:"status,omitempty"`
+	Result       *Result     `json:"result,omitempty"`
 }
 
 type MatchQuery struct {
@@ -55,6 +66,7 @@ func NewPairMatch(teamA, teamB Team, categoryID CategoryID) (*Match, error) {
 		TeamB:      &teamB,
 		Queue:      []TeamID{},
 		CategoryID: categoryID,
+		Status:     MatchStatusReady,
 	}, nil
 }
 

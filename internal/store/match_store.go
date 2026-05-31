@@ -35,8 +35,8 @@ func (st *MatchStore) Insert(ctx context.Context, match *domain.Match) (domain.M
 
 	query := `
 		INSERT INTO "match"
-		(team_a_id, team_b_id, category_id)
-		VALUES ($1, $2, $3)
+		(team_a_id, team_b_id, category_id, bracket_id, bracket_key, bracket_round, bracket_slot, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`
 
@@ -45,6 +45,11 @@ func (st *MatchStore) Insert(ctx context.Context, match *domain.Match) (domain.M
 		matchTeamID(match.TeamA),
 		matchTeamID(match.TeamB),
 		match.CategoryID,
+		nullableString(match.BracketID),
+		nullableString(match.BracketKey),
+		nullableInt(match.BracketRound, match.BracketKey),
+		nullableInt(match.BracketSlot, match.BracketKey),
+		matchStatus(match.Status),
 	).Scan(&id)
 	if err != nil {
 		var pgxErr *pgconn.PgError
@@ -126,6 +131,22 @@ func (st *MatchStore) Find(ctx context.Context, q domain.MatchQuery) ([]*domain.
 
 func (st *MatchStore) FindAll(ctx context.Context) ([]*domain.Match, error) {
 	return st.Find(ctx, domain.MatchQuery{})
+}
+
+func (st *MatchStore) SetStatus(ctx context.Context, id domain.MatchID, status domain.MatchStatus) error {
+	op := "SetStatus"
+	commandTag, err := st.store.db.Exec(ctx, `
+		UPDATE "match"
+		SET status = $2
+		WHERE id = $1
+	`, id, status)
+	if err != nil {
+		return apperr.Wrap(op, "unexpected error updating match status", err, apperr.Field{Name: "id", Value: id})
+	}
+	if commandTag.RowsAffected() == 0 {
+		return apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "id", Value: id})
+	}
+	return nil
 }
 
 func (st *MatchStore) scanMatchRow(ctx context.Context, query string, args ...any) (*domain.Match, error) {
@@ -224,6 +245,11 @@ type matchRow interface {
 func scanMatch(row matchRow) (*domain.Match, error) {
 	var id domain.MatchID
 	var categoryID domain.CategoryID
+	var bracketID sql.NullString
+	var bracketKey sql.NullString
+	var bracketRound sql.NullInt64
+	var bracketSlot sql.NullInt64
+	var status string
 	var teamAID sql.NullInt64
 	var teamAName sql.NullString
 	var teamASchool sql.NullString
@@ -240,6 +266,11 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 	err := row.Scan(
 		&id,
 		&categoryID,
+		&bracketID,
+		&bracketKey,
+		&bracketRound,
+		&bracketSlot,
+		&status,
 		&teamAID,
 		&teamAName,
 		&teamASchool,
@@ -258,9 +289,14 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 	}
 
 	match := &domain.Match{
-		ID:         id,
-		Queue:      []domain.TeamID{},
-		CategoryID: categoryID,
+		ID:           id,
+		Queue:        []domain.TeamID{},
+		CategoryID:   categoryID,
+		BracketID:    bracketID.String,
+		BracketKey:   bracketKey.String,
+		BracketRound: int(bracketRound.Int64),
+		BracketSlot:  int(bracketSlot.Int64),
+		Status:       domain.MatchStatus(status),
 	}
 
 	if teamAID.Valid {
@@ -292,6 +328,11 @@ func matchSelectQuery() string {
 		SELECT
 			m.id,
 			m.category_id,
+			m.bracket_id,
+			m.bracket_key,
+			m.bracket_round,
+			m.bracket_slot,
+			m.status,
 			ta.id,
 			ta.name,
 			ta.school,
@@ -315,4 +356,25 @@ func matchTeamID(team *domain.Team) any {
 		return nil
 	}
 	return team.ID
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func nullableInt(value int, key string) any {
+	if key == "" {
+		return nil
+	}
+	return value
+}
+
+func matchStatus(status domain.MatchStatus) domain.MatchStatus {
+	if status == "" {
+		return domain.MatchStatusReady
+	}
+	return status
 }
