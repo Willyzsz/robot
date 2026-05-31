@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"robot/internal/domain"
 	"robot/pkg/apperr"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ResultStore struct {
@@ -29,15 +29,25 @@ func (st *ResultStore) Insert(ctx context.Context, result *domain.Result) (domai
 
 	query := `
 		INSERT INTO result
-		(winner_team_id, result_time, match_id)
-		VALUES ($1, $2, $3)
+		(winner_team_id, eliminated_team_id, result_time_seconds, match_id)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
+
+	var resultTimeSeconds any
+	if result.Time != nil {
+		resultTimeSeconds = result.Time.TotalSeconds()
+	}
+	var eliminatedTeamID any
+	if result.EliminatedTeamID != nil {
+		eliminatedTeamID = *result.EliminatedTeamID
+	}
 
 	var id domain.ResultID
 	err := st.store.db.QueryRow(ctx, query,
 		result.Winner,
-		result.Time,
+		eliminatedTeamID,
+		resultTimeSeconds,
 		result.MatchID,
 	).Scan(&id)
 	if err != nil {
@@ -47,7 +57,7 @@ func (st *ResultStore) Insert(ctx context.Context, result *domain.Result) (domai
 			case UniqueViolation:
 				return 0, apperr.Wrap(op, "match already has a result", domain.ErrAlreadyExists, apperr.Field{Name: "match_id", Value: result.MatchID})
 			case ForeignKeyViolation:
-				return 0, apperr.Wrap(op, "result references a missing match or winner team", domain.ErrInvalidReference, apperr.Field{Name: "result", Value: result})
+				return 0, apperr.Wrap(op, "result references a missing match, winner team, or eliminated team", domain.ErrInvalidReference, apperr.Field{Name: "result", Value: result})
 			}
 		}
 		return 0, apperr.Wrap(op, "unexpected error inserting result", err, apperr.Field{Name: "database", Value: result})
@@ -60,7 +70,7 @@ func (st *ResultStore) FindByID(ctx context.Context, id domain.ResultID) (*domai
 	op := "FindByID"
 
 	query := `
-		SELECT id, winner_team_id, result_time, match_id
+		SELECT id, winner_team_id, eliminated_team_id, result_time_seconds, match_id
 		FROM result
 		WHERE id = $1
 	`
@@ -79,7 +89,7 @@ func (st *ResultStore) FindByMatchID(ctx context.Context, id domain.MatchID) (*d
 	op := "FindByMatchID"
 
 	query := `
-		SELECT id, winner_team_id, result_time, match_id
+		SELECT id, winner_team_id, eliminated_team_id, result_time_seconds, match_id
 		FROM result
 		WHERE match_id = $1
 	`
@@ -122,7 +132,7 @@ func (st *ResultStore) scanResultRow(ctx context.Context, query string, args ...
 
 func (st *ResultStore) buildQuery(q domain.ResultQuery) ([]any, string) {
 	query := `
-		SELECT id, winner_team_id, result_time, match_id
+		SELECT id, winner_team_id, eliminated_team_id, result_time_seconds, match_id
 		FROM result
 		WHERE 1=1
 	`
@@ -147,14 +157,30 @@ type resultRow interface {
 func scanResult(row resultRow) (*domain.Result, error) {
 	var id domain.ResultID
 	var winner domain.TeamID
-	var resultTime *time.Time
+	var eliminatedTeamID pgtype.Int4
+	var resultTimeSeconds pgtype.Int4
 	var matchID domain.MatchID
 
-	if err := row.Scan(&id, &winner, &resultTime, &matchID); err != nil {
+	if err := row.Scan(&id, &winner, &eliminatedTeamID, &resultTimeSeconds, &matchID); err != nil {
 		return nil, err
 	}
 
-	result, err := domain.NewResult(winner, matchID, resultTime)
+	var eliminated *domain.TeamID
+	if eliminatedTeamID.Valid {
+		id := domain.TeamID(eliminatedTeamID.Int32)
+		eliminated = &id
+	}
+
+	var resultTime *domain.ResultTime
+	if resultTimeSeconds.Valid {
+		parsedTime, err := domain.NewResultTimeFromSeconds(int(resultTimeSeconds.Int32))
+		if err != nil {
+			return nil, err
+		}
+		resultTime = parsedTime
+	}
+
+	result, err := domain.NewResult(winner, matchID, eliminated, resultTime)
 	if err != nil {
 		return nil, err
 	}

@@ -2,9 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"robot/internal/domain"
 	"strings"
-	"time"
 )
 
 type RobotService struct {
@@ -89,6 +90,43 @@ func (svc *RobotService) GetAllMatches(ctx context.Context) ([]*domain.Match, er
 	return svc.matchRepository.FindAll(ctx)
 }
 
+func (svc *RobotService) GetCategoryBracket(ctx context.Context, categoryID domain.CategoryID) (*domain.Bracket, error) {
+	if _, err := svc.categoryRepository.FindByID(ctx, categoryID); err != nil {
+		return nil, err
+	}
+
+	teams, err := svc.teamRepository.Find(ctx, domain.TeamQuery{CategoryID: categoryID})
+	if err != nil {
+		return nil, err
+	}
+	teamIDs := make([]domain.TeamID, 0, len(teams))
+	for _, team := range teams {
+		teamIDs = append(teamIDs, team.ID)
+	}
+
+	matches, err := svc.matchRepository.Find(ctx, domain.MatchQuery{CategoryID: categoryID})
+	if err != nil {
+		return nil, err
+	}
+
+	size := bracketSize(len(teamIDs))
+	labels := bracketLabels(size)
+	rounds := make([][]domain.BracketMatch, len(labels))
+	rounds[0] = firstBracketRound(matches)
+	for round := 1; round < len(labels); round++ {
+		rounds[round] = nextBracketRound(round, rounds[round-1])
+	}
+
+	return &domain.Bracket{
+		ID:         fmt.Sprintf("br-%d", categoryID),
+		CategoryID: categoryID,
+		Size:       size,
+		TeamIDs:    teamIDs,
+		Labels:     labels,
+		Rounds:     rounds,
+	}, nil
+}
+
 func (svc *RobotService) StartMatchQueue(ctx context.Context, categoryID domain.CategoryID, mode domain.MatchMode) ([]*domain.Match, error) {
 	category, err := svc.categoryRepository.FindByID(ctx, categoryID)
 	if err != nil {
@@ -118,6 +156,11 @@ func (svc *RobotService) StartMatchQueue(ctx context.Context, categoryID domain.
 	if err != nil {
 		return nil, err
 	}
+	eligibleTeams = availableTeamsForQueue(eligibleTeams, existingMatches)
+	if len(eligibleTeams) == 0 {
+		return []*domain.Match{}, nil
+	}
+	shuffleTeams(eligibleTeams)
 
 	var matches []*domain.Match
 	switch mode {
@@ -178,11 +221,6 @@ func (svc *RobotService) eligibleTeams(ctx context.Context, teams []*domain.Team
 func (svc *RobotService) startPairwiseMatches(ctx context.Context, categoryID domain.CategoryID, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
 	matches := make([]*domain.Match, 0, len(teams)/2)
 	for i := 0; i+1 < len(teams); i += 2 {
-		if existing := findExistingPairMatch(existingMatches, teams[i].ID, teams[i+1].ID); existing != nil {
-			matches = append(matches, existing)
-			continue
-		}
-
 		match, err := domain.NewPairMatch(teams[i], teams[i+1], categoryID)
 		if err != nil {
 			return nil, err
@@ -216,6 +254,49 @@ func (svc *RobotService) startSharedMatch(ctx context.Context, categoryID domain
 	}
 	match.ID = id
 	return []*domain.Match{match}, nil
+}
+
+func availableTeamsForQueue(teams []domain.Team, existingMatches []*domain.Match) []domain.Team {
+	blocked := make(map[domain.TeamID]struct{})
+	for _, match := range existingMatches {
+		if match.Result != nil {
+			if match.Result.EliminatedTeamID != nil {
+				blocked[*match.Result.EliminatedTeamID] = struct{}{}
+			}
+			continue
+		}
+
+		for _, teamID := range matchTeamIDs(match) {
+			blocked[teamID] = struct{}{}
+		}
+	}
+
+	available := make([]domain.Team, 0, len(teams))
+	for _, team := range teams {
+		if _, exists := blocked[team.ID]; exists {
+			continue
+		}
+		available = append(available, team)
+	}
+	return available
+}
+
+func matchTeamIDs(match *domain.Match) []domain.TeamID {
+	var teamIDs []domain.TeamID
+	if match.TeamA != nil {
+		teamIDs = append(teamIDs, match.TeamA.ID)
+	}
+	if match.TeamB != nil {
+		teamIDs = append(teamIDs, match.TeamB.ID)
+	}
+	teamIDs = append(teamIDs, match.Queue...)
+	return teamIDs
+}
+
+func shuffleTeams(teams []domain.Team) {
+	rand.Shuffle(len(teams), func(i, j int) {
+		teams[i], teams[j] = teams[j], teams[i]
+	})
 }
 
 func findExistingPairMatch(matches []*domain.Match, teamAID, teamBID domain.TeamID) *domain.Match {
@@ -270,6 +351,117 @@ func inferMatchMode(categoryName string) domain.MatchMode {
 	return domain.MatchModeShared
 }
 
+func bracketSize(teamCount int) int {
+	size := 2
+	for size < teamCount {
+		size *= 2
+	}
+	return size
+}
+
+func bracketLabels(size int) []string {
+	roundCount := 0
+	for n := size; n > 1; n /= 2 {
+		roundCount++
+	}
+
+	labels := make([]string, roundCount)
+	for i := range labels {
+		remaining := roundCount - i
+		switch remaining {
+		case 1:
+			labels[i] = "Final"
+		case 2:
+			labels[i] = "Semifinal"
+		case 3:
+			labels[i] = "Quarterfinal"
+		default:
+			labels[i] = fmt.Sprintf("Round %d", i+1)
+		}
+	}
+	return labels
+}
+
+func firstBracketRound(matches []*domain.Match) []domain.BracketMatch {
+	round := make([]domain.BracketMatch, 0, len(matches))
+	for slot, match := range matches {
+		round = append(round, bracketMatchFromMatch(0, slot, match))
+	}
+	return round
+}
+
+func bracketMatchFromMatch(round, slot int, match *domain.Match) domain.BracketMatch {
+	var teamA, teamB, winner *domain.TeamID
+	var matchID *domain.MatchID
+	if match.TeamA != nil {
+		id := match.TeamA.ID
+		teamA = &id
+	}
+	if match.TeamB != nil {
+		id := match.TeamB.ID
+		teamB = &id
+	}
+	if match.Result != nil {
+		id := match.Result.Winner
+		winner = &id
+	}
+	if match.ID != 0 {
+		id := match.ID
+		matchID = &id
+	}
+
+	return domain.BracketMatch{
+		Key:     fmt.Sprintf("r%d-m%d", round, slot),
+		Round:   round,
+		Slot:    slot,
+		TeamA:   teamA,
+		TeamB:   teamB,
+		Winner:  winner,
+		MatchID: matchID,
+		Status:  bracketMatchStatus(teamA, teamB, winner),
+	}
+}
+
+func nextBracketRound(round int, previous []domain.BracketMatch) []domain.BracketMatch {
+	slots := len(previous) / 2
+	if slots < 1 {
+		slots = 1
+	}
+
+	next := make([]domain.BracketMatch, 0, slots)
+	for slot := range slots {
+		var teamA, teamB *domain.TeamID
+		left := slot * 2
+		right := left + 1
+		if left < len(previous) {
+			teamA = previous[left].Winner
+		}
+		if right < len(previous) {
+			teamB = previous[right].Winner
+		}
+
+		next = append(next, domain.BracketMatch{
+			Key:    fmt.Sprintf("r%d-m%d", round, slot),
+			Round:  round,
+			Slot:   slot,
+			TeamA:  teamA,
+			TeamB:  teamB,
+			Status: bracketMatchStatus(teamA, teamB, nil),
+		})
+	}
+	return next
+}
+
+func bracketMatchStatus(teamA, teamB, winner *domain.TeamID) string {
+	if winner != nil {
+		return "completed"
+	}
+	if teamA != nil && teamB != nil {
+		return "ready"
+	}
+	return "pending"
+}
+
 func (svc *RobotService) GetMatchByID(ctx context.Context, id domain.MatchID) (*domain.Match, error) {
 	return svc.matchRepository.FindByID(ctx, id)
 }
@@ -278,13 +470,13 @@ func (svc *RobotService) GetAllResults(ctx context.Context) ([]*domain.Result, e
 	return svc.resultRepository.FindAll(ctx)
 }
 
-func (svc *RobotService) CreateResult(ctx context.Context, matchID domain.MatchID, winner domain.TeamID, resultTime *time.Time) (domain.ResultID, error) {
+func (svc *RobotService) CreateResult(ctx context.Context, matchID domain.MatchID, winner domain.TeamID, eliminatedTeamID *domain.TeamID, resultTime *domain.ResultTime) (domain.ResultID, error) {
 	match, err := svc.matchRepository.FindByID(ctx, matchID)
 	if err != nil {
 		return 0, err
 	}
 
-	result, err := domain.NewResultForMatch(match, winner, resultTime)
+	result, err := domain.NewResultForMatch(match, winner, eliminatedTeamID, resultTime)
 	if err != nil {
 		return 0, err
 	}

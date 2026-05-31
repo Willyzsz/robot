@@ -13,13 +13,15 @@ const pendingExcelValue = "pendiente"
 
 type ExcelService struct {
 	categoryRepository domain.CategoryRepository
+	ruleRepository     domain.RuleRepository
 	teamRepository     domain.TeamRepository
 	memberRepository   domain.MemberRepository
 }
 
-func NewExcelService(categoryRepo domain.CategoryRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository) *ExcelService {
+func NewExcelService(categoryRepo domain.CategoryRepository, ruleRepo domain.RuleRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository) *ExcelService {
 	return &ExcelService{
 		categoryRepository: categoryRepo,
+		ruleRepository:     ruleRepo,
 		teamRepository:     teamRepo,
 		memberRepository:   memberRepo,
 	}
@@ -61,6 +63,50 @@ func (svc *ExcelService) CreateData(ctx context.Context, rows []excel.FormRow) e
 			return svc.err(op, err)
 		}
 		teamsIDs[row.NameTeam] = teamID
+	}
+	return nil
+}
+
+func (svc *ExcelService) CreateRules(ctx context.Context, rows []excel.RuleRow) error {
+	op := "CreateRules"
+	categoriesIDs := make(map[string]domain.CategoryID)
+	existingRules := make(map[domain.CategoryID]map[string]struct{})
+
+	for _, row := range rows {
+		description := ruleDescription(row)
+		if strings.TrimSpace(row.Category) == "" || description == "" {
+			continue
+		}
+
+		categoryID, err := svc.getOrCreateCategory(ctx, row.Category, categoriesIDs)
+		if err != nil {
+			return svc.err(op, err)
+		}
+
+		ruleType := domain.RuleTypeCharacteristic
+		if row.Type == excel.RuleSheetTypeRestriction {
+			ruleType = domain.RuleTypeRestriction
+		}
+
+		key := ruleKey(description, ruleType)
+		rules, ok, err := svc.rulesForCategory(ctx, categoryID, existingRules)
+		if err != nil {
+			return svc.err(op, err)
+		}
+		if ok {
+			if _, exists := rules[key]; exists {
+				continue
+			}
+		}
+
+		rule, err := domain.NewRule(description, ruleType, categoryID)
+		if err != nil {
+			return svc.err(op, err)
+		}
+		if _, err := svc.ruleRepository.Insert(ctx, rule); err != nil {
+			return svc.err(op, err)
+		}
+		rules[key] = struct{}{}
 	}
 	return nil
 }
@@ -146,6 +192,48 @@ func valueOrPending(value string) string {
 		return pendingExcelValue
 	}
 	return value
+}
+
+func ruleDescription(row excel.RuleRow) string {
+	switch row.Type {
+	case excel.RuleSheetTypeRegistration:
+		characteristic := strings.TrimSpace(row.Characteristic)
+		specification := strings.TrimSpace(row.Specification)
+		switch {
+		case characteristic == "":
+			return specification
+		case specification == "":
+			return characteristic
+		default:
+			return characteristic + ": " + specification
+		}
+	case excel.RuleSheetTypeRestriction:
+		return strings.TrimSpace(row.Restriction)
+	default:
+		return ""
+	}
+}
+
+func ruleKey(description string, ruleType domain.RuleType) string {
+	return string(ruleType) + ":" + strings.ToLower(strings.Join(strings.Fields(description), " "))
+}
+
+func (svc *ExcelService) rulesForCategory(ctx context.Context, categoryID domain.CategoryID, cache map[domain.CategoryID]map[string]struct{}) (map[string]struct{}, bool, error) {
+	if rules, exists := cache[categoryID]; exists {
+		return rules, true, nil
+	}
+
+	foundRules, err := svc.ruleRepository.FindByCategoryID(ctx, categoryID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	rules := make(map[string]struct{}, len(foundRules))
+	for _, rule := range foundRules {
+		rules[ruleKey(rule.Description, rule.Type)] = struct{}{}
+	}
+	cache[categoryID] = rules
+	return rules, true, nil
 }
 
 func shouldSkipExcelRow(row excel.FormRow) bool {

@@ -17,6 +17,29 @@ const (
 	HeaderGrade         = "¿Nivel de escolaridad que cursa?"
 	HeaderNameLeader    = "Nombre del capitán del equipo"
 	HeaderTeacher       = "Nombre del asesor"
+
+	HeaderCharacteristic = "Caracteristicas"
+	HeaderSpecification  = "Especificacion"
+	HeaderRestriction    = "Restricciones"
+)
+
+var ruleSheets = []struct {
+	Name     string
+	Category string
+	Type     RuleSheetType
+}{
+	{Name: "Velocista_Registro", Category: "Velocista", Type: RuleSheetTypeRegistration},
+	{Name: "Minisumo_Registro", Category: "Minisumo", Type: RuleSheetTypeRegistration},
+	{Name: "Minisumo_Restricciones", Category: "Minisumo", Type: RuleSheetTypeRestriction},
+	{Name: "Futbol_Registro", Category: "Futbol", Type: RuleSheetTypeRegistration},
+	{Name: "Futbol_Restricciones", Category: "Futbol", Type: RuleSheetTypeRestriction},
+}
+
+type RuleSheetType string
+
+const (
+	RuleSheetTypeRegistration RuleSheetType = "registration"
+	RuleSheetTypeRestriction  RuleSheetType = "restriction"
 )
 
 type FormRow struct {
@@ -31,6 +54,14 @@ type FormRow struct {
 	Teacher      string
 }
 
+type RuleRow struct {
+	Category       string
+	Type           RuleSheetType
+	Characteristic string
+	Specification  string
+	Restriction    string
+}
+
 func ParseRows(path string) ([]FormRow, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -40,6 +71,25 @@ func ParseRows(path string) ([]FormRow, error) {
 
 	sheet := f.GetSheetName(0)
 	return getRows(f, sheet)
+}
+
+func ParseRuleRows(path string) ([]RuleRow, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var rows []RuleRow
+	for _, sheet := range ruleSheets {
+		sheetRows, err := getRuleRows(f, sheet.Name, sheet.Category, sheet.Type)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, sheetRows...)
+	}
+
+	return rows, nil
 }
 
 func getRows(f *excelize.File, sheet string) ([]FormRow, error) {
@@ -71,6 +121,39 @@ func getRows(f *excelize.File, sheet string) ([]FormRow, error) {
 	return formRows, nil
 }
 
+func getRuleRows(f *excelize.File, sheet, category string, ruleType RuleSheetType) ([]RuleRow, error) {
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []RuleRow{}, nil
+	}
+
+	headers := headerIndexes(rows[0])
+	ruleRows := make([]RuleRow, 0, len(rows)-1)
+
+	for _, row := range rows[1:] {
+		switch ruleType {
+		case RuleSheetTypeRegistration:
+			ruleRows = append(ruleRows, RuleRow{
+				Category:       category,
+				Type:           ruleType,
+				Characteristic: cell(row, headers, HeaderCharacteristic),
+				Specification:  cell(row, headers, HeaderSpecification),
+			})
+		case RuleSheetTypeRestriction:
+			ruleRows = append(ruleRows, RuleRow{
+				Category:    category,
+				Type:        ruleType,
+				Restriction: cell(row, headers, HeaderRestriction),
+			})
+		}
+	}
+
+	return ruleRows, nil
+}
+
 func headerIndexes(headers []string) map[string]int {
 	indexes := make(map[string]int, len(headers))
 	for index, header := range headers {
@@ -90,7 +173,7 @@ func cell(row []string, headers map[string]int, header string) string {
 }
 
 func normalizeHeader(header string) string {
-	return strings.Join(strings.Fields(header), " ")
+	return strings.ToLower(strings.Join(strings.Fields(header), " "))
 }
 
 func splitCell(value string) []string {
@@ -109,4 +192,4 @@ func splitCell(value string) []string {
 	}
 
 	return values
-  }
+}

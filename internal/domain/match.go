@@ -148,6 +148,14 @@ func (m *Match) SetResult(result *Result) error {
 	if !m.hasTeam(result.Winner) {
 		return apperr.Wrap("SetResult", "winner must be one of the match teams", ErrInvalid, apperr.Field{Name: "winner", Value: result.Winner})
 	}
+	if result.EliminatedTeamID != nil {
+		if !m.hasTeam(*result.EliminatedTeamID) {
+			return apperr.Wrap("SetResult", "eliminated team must be one of the match teams", ErrInvalid, apperr.Field{Name: "eliminated_team_id", Value: *result.EliminatedTeamID})
+		}
+		if *result.EliminatedTeamID == result.Winner {
+			return apperr.Wrap("SetResult", "winner cannot also be eliminated", ErrInvalid, apperr.Field{Name: "team_id", Value: result.Winner})
+		}
+	}
 	m.Result = result
 	return nil
 }
@@ -160,6 +168,21 @@ func (m *Match) hasTeam(teamID TeamID) bool {
 		return true
 	}
 	return slices.Contains(m.Queue, teamID)
+}
+
+func (m *Match) eliminatedTeamFor(winner TeamID) *TeamID {
+	if m.TeamA == nil || m.TeamB == nil {
+		return nil
+	}
+	if m.TeamA.ID == winner {
+		eliminated := m.TeamB.ID
+		return &eliminated
+	}
+	if m.TeamB.ID == winner {
+		eliminated := m.TeamA.ID
+		return &eliminated
+	}
+	return nil
 }
 
 func (mode MatchMode) Valid() bool {

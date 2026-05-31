@@ -183,7 +183,7 @@ func (st *MatchStore) findQueue(ctx context.Context, id domain.MatchID) ([]domai
 
 func (st *MatchStore) findResult(ctx context.Context, id domain.MatchID) (*domain.Result, error) {
 	result, err := scanResult(st.store.db.QueryRow(ctx, `
-		SELECT id, winner_team_id, result_time, match_id
+		SELECT id, winner_team_id, eliminated_team_id, result_time_seconds, match_id
 		FROM result
 		WHERE match_id = $1
 	`, id))
@@ -213,6 +213,7 @@ func (st *MatchStore) buildQuery(q domain.MatchQuery) ([]any, string) {
 		query += fmt.Sprintf(" AND m.category_id = $%d", len(args))
 	}
 
+	query += " ORDER BY m.id"
 	return args, query
 }
 

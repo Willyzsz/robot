@@ -86,13 +86,57 @@ CREATE TABLE IF NOT EXISTS match_queue (
 CREATE TABLE IF NOT EXISTS result (
     id SERIAL PRIMARY KEY,
     winner_team_id INTEGER NOT NULL,
-    result_time TIMESTAMPTZ,
+    eliminated_team_id INTEGER,
+    result_time_seconds INTEGER,
     match_id INTEGER NOT NULL UNIQUE,
+    CONSTRAINT ck_result_time_seconds
+        CHECK (result_time_seconds IS NULL OR result_time_seconds >= 0),
+    CONSTRAINT ck_result_eliminated_not_winner
+        CHECK (eliminated_team_id IS NULL OR eliminated_team_id <> winner_team_id),
     CONSTRAINT fk_result_winner
         FOREIGN KEY (winner_team_id) REFERENCES team(id),
+    CONSTRAINT fk_result_eliminated
+        FOREIGN KEY (eliminated_team_id) REFERENCES team(id),
     CONSTRAINT fk_result_match
         FOREIGN KEY (match_id) REFERENCES "match"(id) ON DELETE CASCADE
 );
+
+ALTER TABLE result
+    ADD COLUMN IF NOT EXISTS eliminated_team_id INTEGER,
+    ADD COLUMN IF NOT EXISTS result_time_seconds INTEGER;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_result_time_seconds'
+    ) THEN
+        ALTER TABLE result
+            ADD CONSTRAINT ck_result_time_seconds
+            CHECK (result_time_seconds IS NULL OR result_time_seconds >= 0);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_result_eliminated_not_winner'
+    ) THEN
+        ALTER TABLE result
+            ADD CONSTRAINT ck_result_eliminated_not_winner
+            CHECK (eliminated_team_id IS NULL OR eliminated_team_id <> winner_team_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_result_eliminated'
+    ) THEN
+        ALTER TABLE result
+            ADD CONSTRAINT fk_result_eliminated
+            FOREIGN KEY (eliminated_team_id) REFERENCES team(id);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS robot (
     id SERIAL PRIMARY KEY,

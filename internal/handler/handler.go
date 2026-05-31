@@ -10,7 +10,6 @@ import (
 	"robot/internal/service"
 	"robot/pkg/apperr"
 	"strconv"
-	"time"
 )
 
 type Handler struct {
@@ -53,8 +52,9 @@ type startMatchQueueRequest struct {
 }
 
 type createResultRequest struct {
-	Winner domain.TeamID `json:"winner"`
-	Time   *time.Time    `json:"time,omitempty"`
+	TeamID           domain.TeamID      `json:"team_id"`
+	EliminatedTeamID *domain.TeamID     `json:"eliminated_team_id,omitempty"`
+	Time             *domain.ResultTime `json:"time,omitempty"`
 }
 
 type createRobotRequest struct {
@@ -292,6 +292,26 @@ func (h *Handler) GetAllMatches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, matches)
 }
 
+func (h *Handler) GetCategoryBracket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("category_id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+
+	bracket, err := h.robotService.GetCategoryBracket(r.Context(), domain.CategoryID(id))
+	if err != nil {
+		handleError(w, r, "Failed to retrieve bracket", err, id)
+		return
+	}
+	writeJSON(w, http.StatusOK, bracket)
+}
+
 func (h *Handler) CreateMatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -390,7 +410,7 @@ func (h *Handler) CreateResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.robotService.CreateResult(r.Context(), domain.MatchID(matchID), req.Winner, req.Time)
+	id, err := h.robotService.CreateResult(r.Context(), domain.MatchID(matchID), req.TeamID, req.EliminatedTeamID, req.Time)
 	if err != nil {
 		http.Error(w, "Failed to create result", http.StatusInternalServerError)
 		return

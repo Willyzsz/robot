@@ -47,9 +47,9 @@ func main() {
 	if err := storeDB.Migrate(ctx); err != nil {
 		log.Fatal(err)
 	}
-	if err := storeDB.Seed(ctx); err != nil {
-		log.Fatal(err)
-	}
+	// if err := storeDB.Seed(ctx); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	categoryRepo := store.NewCategoryStore(storeDB)
 	ruleRepo := store.NewRuleStore(storeDB)
@@ -70,6 +70,7 @@ func main() {
 	mux.HandleFunc("POST /categorias", robotHandler.CreateCategory)
 	mux.HandleFunc("GET /categorias/{category_id}/equipos", robotHandler.GetTeamsByCategoryID)
 	mux.HandleFunc("GET /categorias/{category_id}/reglas", robotHandler.GetRulesByCategoryID)
+	mux.HandleFunc("GET /categorias/{category_id}/bracket", robotHandler.GetCategoryBracket)
 	mux.HandleFunc("POST /categorias/{category_id}/partidas/iniciar", robotHandler.StartMatchQueue)
 	mux.HandleFunc("POST /reglas", robotHandler.CreateRule)
 	mux.HandleFunc("POST /equipos", robotHandler.CreateTeam)
