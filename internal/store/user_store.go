@@ -41,10 +41,10 @@ func (st *UserStore) FindByUsername(ctx context.Context, username string) (*doma
 
 func (st *UserStore) hydrateUserCategories(ctx context.Context, user *domain.User) error {
 	rows, err := st.store.db.Query(ctx, `
-		SELECT category_id
+		SELECT category_id, is_internal
 		FROM user_category
 		WHERE user_id = $1
-		ORDER BY category_id
+		ORDER BY category_id, is_internal
 	`, user.ID)
 	if err != nil {
 		return apperr.Wrap("hydrateUserCategories", "unexpected error selecting user categories", err, apperr.Field{Name: "user_id", Value: user.ID})
@@ -52,12 +52,18 @@ func (st *UserStore) hydrateUserCategories(ctx context.Context, user *domain.Use
 	defer rows.Close()
 
 	user.CategoryIDs = []domain.CategoryID{}
+	user.Categories = []domain.UserCategory{}
 	for rows.Next() {
 		var categoryID domain.CategoryID
-		if err := rows.Scan(&categoryID); err != nil {
+		var isInternal bool
+		if err := rows.Scan(&categoryID, &isInternal); err != nil {
 			return apperr.Wrap("hydrateUserCategories", "unexpected error scanning user category", err, apperr.Field{Name: "user_id", Value: user.ID})
 		}
 		user.CategoryIDs = append(user.CategoryIDs, categoryID)
+		user.Categories = append(user.Categories, domain.UserCategory{
+			CategoryID: categoryID,
+			IsInternal: isInternal,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return apperr.Wrap("hydrateUserCategories", "unexpected error collecting user categories", err, apperr.Field{Name: "user_id", Value: user.ID})

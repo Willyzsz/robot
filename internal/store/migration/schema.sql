@@ -30,6 +30,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS user_category (
     user_id INTEGER NOT NULL,
     category_id INTEGER NOT NULL,
+    is_internal BOOLEAN NOT NULL DEFAULT false,
     PRIMARY KEY (user_id, category_id),
     CONSTRAINT fk_user_category_user
         FOREIGN KEY (user_id) REFERENCES user_account(id) ON DELETE CASCADE,
@@ -37,13 +38,29 @@ CREATE TABLE IF NOT EXISTS user_category (
         FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE
 );
 
+ALTER TABLE user_category
+    ADD COLUMN IF NOT EXISTS is_internal BOOLEAN NOT NULL DEFAULT false;
+
+DELETE FROM user_account
+WHERE username IN ('juez', 'arbitro');
+
 WITH user_seed(username, name, role, password_hash) AS (
     VALUES
         ('admin', 'Administrador', 'admin', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
         ('dev', 'Desarrollador', 'dev', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
-        ('juez', 'Juez', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
-        ('arbitro', 'Arbitro', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
-        ('visitante', 'Visitante', 'visitante', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y')
+        ('visitante', 'Visitante', 'visitante', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('guillermo.iglesias', 'Guillermo Elias Iglesias Lopez', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('jesus.hernandez', 'Jesus arturo hernandez soberon', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('alejandra.gonzales', 'Alejandra Gonzales miranda', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('martha.sanchez', 'Martha Lilia Sanchez sanchez', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('raul.uranga', 'Raul uranga cruz', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('rogelio.galvan', 'rogelio galvan hernandez', 'juez', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('rosendo.deluna', 'Rosendo de luna alvarez', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('estela.salas', 'estela salas siller', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('juan.serrano', 'juan jaime serrano torres', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('manuel.zertuche', 'zertuche ramirez manual alonso', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('ximena.silva', 'silva garcia ximena', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y'),
+        ('felix.macias', 'macias lopez feliz emmanuel', 'arbitro', '$2a$10$ba/zJUnNZvs/M4qMlKnyu.VDooIhiy4ElnkTPTo6HXW0SmjeBsN/y')
 )
 INSERT INTO user_account (username, name, role, password_hash)
 SELECT username, name, role, password_hash
@@ -53,12 +70,63 @@ SET name = EXCLUDED.name,
     role = EXCLUDED.role,
     password_hash = EXCLUDED.password_hash;
 
-INSERT INTO user_category (user_id, category_id)
-SELECT u.id, c.id
-FROM user_account u
-CROSS JOIN category c
-WHERE u.role IN ('juez', 'arbitro')
-ON CONFLICT (user_id, category_id) DO NOTHING;
+WITH category_seed(name) AS (
+    VALUES
+        ('Minisumo'),
+        ('Velocista'),
+        ('Futbol')
+)
+INSERT INTO category (name)
+SELECT name
+FROM category_seed
+ON CONFLICT (name) DO NOTHING;
+
+WITH user_assignment(username, category_name, is_internal) AS (
+    VALUES
+        ('guillermo.iglesias', 'Minisumo', false),
+        ('jesus.hernandez', 'Velocista', false),
+        ('alejandra.gonzales', 'Futbol', false),
+        ('martha.sanchez', 'Minisumo', true),
+        ('raul.uranga', 'Velocista', true),
+        ('rogelio.galvan', 'Futbol', true),
+        ('rosendo.deluna', 'Minisumo', false),
+        ('estela.salas', 'Velocista', false),
+        ('juan.serrano', 'Futbol', false),
+        ('manuel.zertuche', 'Minisumo', true),
+        ('ximena.silva', 'Velocista', true),
+        ('felix.macias', 'Futbol', true)
+),
+assigned_users AS (
+    SELECT u.id
+    FROM user_account u
+    JOIN user_assignment ua ON ua.username = u.username
+)
+DELETE FROM user_category uc
+USING assigned_users au
+WHERE uc.user_id = au.id;
+
+WITH user_assignment(username, category_name, is_internal) AS (
+    VALUES
+        ('guillermo.iglesias', 'Minisumo', false),
+        ('jesus.hernandez', 'Velocista', false),
+        ('alejandra.gonzales', 'Futbol', false),
+        ('martha.sanchez', 'Minisumo', true),
+        ('raul.uranga', 'Velocista', true),
+        ('rogelio.galvan', 'Futbol', true),
+        ('rosendo.deluna', 'Minisumo', false),
+        ('estela.salas', 'Velocista', false),
+        ('juan.serrano', 'Futbol', false),
+        ('manuel.zertuche', 'Minisumo', true),
+        ('ximena.silva', 'Velocista', true),
+        ('felix.macias', 'Futbol', true)
+)
+INSERT INTO user_category (user_id, category_id, is_internal)
+SELECT u.id, c.id, ua.is_internal
+FROM user_assignment ua
+JOIN user_account u ON u.username = ua.username
+JOIN category c ON c.name = ua.category_name
+ON CONFLICT (user_id, category_id) DO UPDATE
+SET is_internal = EXCLUDED.is_internal;
 
 CREATE TABLE IF NOT EXISTS rule (
     id SERIAL PRIMARY KEY,

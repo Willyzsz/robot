@@ -14,12 +14,18 @@ const (
 )
 
 type User struct {
-	ID           UserID       `json:"id"`
-	Username     string       `json:"username"`
-	Name         string       `json:"name"`
-	Role         UserRole     `json:"role"`
-	CategoryIDs  []CategoryID `json:"category_ids,omitempty"`
-	PasswordHash string       `json:"-"`
+	ID           UserID         `json:"id"`
+	Username     string         `json:"username"`
+	Name         string         `json:"name"`
+	Role         UserRole       `json:"role"`
+	CategoryIDs  []CategoryID   `json:"category_ids,omitempty"`
+	Categories   []UserCategory `json:"categories,omitempty"`
+	PasswordHash string         `json:"-"`
+}
+
+type UserCategory struct {
+	CategoryID CategoryID `json:"category_id"`
+	IsInternal bool       `json:"is_internal"`
 }
 
 func NewUser(username, name string, role UserRole, passwordHash string) (*User, error) {
@@ -37,6 +43,7 @@ func NewUser(username, name string, role UserRole, passwordHash string) (*User, 
 		Name:         name,
 		Role:         role,
 		CategoryIDs:  []CategoryID{},
+		Categories:   []UserCategory{},
 		PasswordHash: passwordHash,
 	}, nil
 }
