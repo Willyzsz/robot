@@ -20,6 +20,11 @@ type createCategoryRequest struct {
 	Name string `json:"name"`
 }
 
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 type createRuleRequest struct {
 	Description string            `json:"description"`
 	Type        domain.RuleType   `json:"type"`
@@ -31,6 +36,7 @@ type createTeamRequest struct {
 	School     string            `json:"school"`
 	Grade      string            `json:"grade"`
 	Teacher    string            `json:"teacher"`
+	IsInternal bool              `json:"is_internal"`
 	CategoryID domain.CategoryID `json:"category_id"`
 }
 
@@ -74,6 +80,26 @@ func NewHandler(robotService *service.RobotService) *Handler {
 	return &Handler{
 		robotService: robotService,
 	}
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid login payload", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.robotService.Login(r.Context(), req.Username, req.Password)
+	if err != nil {
+		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+		return
+	}
+	writeJSON(w, http.StatusOK, user)
 }
 
 func (h *Handler) GetAllTeamsWithMembersAndCategory(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +236,7 @@ func (h *Handler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.robotService.CreateTeam(r.Context(), req.Name, req.School, req.Grade, req.Teacher, req.CategoryID)
+	id, err := h.robotService.CreateTeam(r.Context(), req.Name, req.School, req.Grade, req.Teacher, req.IsInternal, req.CategoryID)
 	if err != nil {
 		http.Error(w, "Failed to create team", http.StatusInternalServerError)
 		return

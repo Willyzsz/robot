@@ -153,6 +153,7 @@ func (svc *ExcelService) buildTeamFromRow(row excel.FormRow, categoryID domain.C
 	if err != nil {
 		return nil, err
 	}
+	team.IsInternal = isInternalGrade(row.Grade)
 
 	leader, err := domain.NewMember(leaderName, row.EmailLeader, true, team.ID)
 	if err != nil {
@@ -192,6 +193,27 @@ func valueOrPending(value string) string {
 		return pendingExcelValue
 	}
 	return value
+}
+
+func isInternalGrade(grade string) bool {
+	switch normalizeExcelValue(grade) {
+	case "utnc nivel tsu", "utnc nivel ingenieria":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeExcelValue(value string) string {
+	value = strings.ToLower(strings.Join(strings.Fields(value), " "))
+	replacer := strings.NewReplacer(
+		"á", "a",
+		"é", "e",
+		"í", "i",
+		"ó", "o",
+		"ú", "u",
+	)
+	return replacer.Replace(value)
 }
 
 func ruleDescription(row excel.RuleRow) string {

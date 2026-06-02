@@ -6,9 +6,12 @@ import (
 	"math/rand"
 	"robot/internal/domain"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type RobotService struct {
+	userRepository     domain.UserRepository
 	categoryRepository domain.CategoryRepository
 	ruleRepository     domain.RuleRepository
 	teamRepository     domain.TeamRepository
@@ -18,8 +21,9 @@ type RobotService struct {
 	robotRepository    domain.RobotRepository
 }
 
-func NewRobotService(categoryRepo domain.CategoryRepository, ruleRepo domain.RuleRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository, matchRepo domain.MatchRepository, resultRepo domain.ResultRepository, robotRepo domain.RobotRepository) *RobotService {
+func NewRobotService(userRepo domain.UserRepository, categoryRepo domain.CategoryRepository, ruleRepo domain.RuleRepository, teamRepo domain.TeamRepository, memberRepo domain.MemberRepository, matchRepo domain.MatchRepository, resultRepo domain.ResultRepository, robotRepo domain.RobotRepository) *RobotService {
 	return &RobotService{
+		userRepository:     userRepo,
 		categoryRepository: categoryRepo,
 		ruleRepository:     ruleRepo,
 		teamRepository:     teamRepo,
@@ -28,6 +32,17 @@ func NewRobotService(categoryRepo domain.CategoryRepository, ruleRepo domain.Rul
 		resultRepository:   resultRepo,
 		robotRepository:    robotRepo,
 	}
+}
+
+func (svc *RobotService) Login(ctx context.Context, username, password string) (*domain.User, error) {
+	user, err := svc.userRepository.FindByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, domain.ErrInvalid
+	}
+	return user, nil
 }
 
 func (svc *RobotService) GetAllCategories(ctx context.Context) ([]*domain.Category, error) {
@@ -58,11 +73,12 @@ func (svc *RobotService) GetAllTeams(ctx context.Context) ([]*domain.Team, error
 	return svc.teamRepository.FindAll(ctx)
 }
 
-func (svc *RobotService) CreateTeam(ctx context.Context, name, school, grade, teacher string, categoryID domain.CategoryID) (domain.TeamID, error) {
+func (svc *RobotService) CreateTeam(ctx context.Context, name, school, grade, teacher string, isInternal bool, categoryID domain.CategoryID) (domain.TeamID, error) {
 	team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
 	if err != nil {
 		return 0, err
 	}
+	team.IsInternal = isInternal
 	return svc.teamRepository.Insert(ctx, team)
 }
 
@@ -164,21 +180,7 @@ func (svc *RobotService) StartMatchQueue(ctx context.Context, categoryID domain.
 	}
 	shuffleTeams(eligibleTeams)
 
-	var matches []*domain.Match
-	switch mode {
-	case domain.MatchModePairwise:
-		if isSumoCategory(category.Name) {
-			matches, err = svc.startSumoMatches(ctx, categoryID, eligibleTeams, existingMatches)
-		} else {
-			matches, err = svc.startPairwiseMatches(ctx, categoryID, "winner", eligibleTeams, existingMatches)
-		}
-	case domain.MatchModeShared:
-		matches, err = svc.startSharedMatch(ctx, categoryID, eligibleTeams, existingMatches)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return matches, nil
+	return svc.startCategoryMatches(ctx, category, eligibleTeams, existingMatches, mode)
 }
 
 func (svc *RobotService) CreateMatch(ctx context.Context, teamAID, teamBID domain.TeamID, queueIDs []domain.TeamID) (domain.MatchID, error) {
@@ -224,30 +226,73 @@ func (svc *RobotService) eligibleTeams(ctx context.Context, teams []*domain.Team
 	return eligible, nil
 }
 
-func (svc *RobotService) startPairwiseMatches(ctx context.Context, categoryID domain.CategoryID, bracketID string, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
-	matches := make([]*domain.Match, 0, len(teams)/2)
-	round := nextBracketRoundIndex(bracketID, existingMatches)
-	for i := 0; i+1 < len(teams); i += 2 {
-		match, err := domain.NewPairMatch(teams[i], teams[i+1], categoryID)
+func (svc *RobotService) startCategoryMatches(ctx context.Context, category *domain.Category, teams []domain.Team, existingMatches []*domain.Match, mode domain.MatchMode) ([]*domain.Match, error) {
+	groups := teamsByInternalStatus(teams)
+	matches := []*domain.Match{}
+
+	for _, isInternal := range []bool{true, false} {
+		group := groups[isInternal]
+		if len(group) == 0 {
+			continue
+		}
+
+		var groupMatches []*domain.Match
+		var err error
+		switch {
+		case isSumoCategory(category.Name):
+			groupMatches, err = svc.startSumoMatches(ctx, category.ID, isInternal, group, existingMatches)
+		case isFutbolCategory(category.Name):
+			groupMatches, err = svc.startOnePairWithQueue(ctx, category.ID, "main", isInternal, group, existingMatches)
+		case isVelocistaCategory(category.Name):
+			groupMatches, err = svc.startQueueMatch(ctx, category.ID, "queue", isInternal, group, existingMatches)
+		case mode == domain.MatchModePairwise:
+			groupMatches, err = svc.startOnePairWithQueue(ctx, category.ID, "main", isInternal, group, existingMatches)
+		default:
+			groupMatches, err = svc.startQueueMatch(ctx, category.ID, "queue", isInternal, group, existingMatches)
+		}
 		if err != nil {
 			return nil, err
 		}
-		match.BracketID = bracketID
-		match.BracketRound = round
-		match.BracketSlot = i / 2
-		match.BracketKey = fmt.Sprintf("r%d-m%d", match.BracketRound, match.BracketSlot)
-		match.Status = domain.MatchStatusReady
-		id, err := svc.matchRepository.Insert(ctx, match)
-		if err != nil {
-			return nil, err
-		}
-		match.ID = id
-		matches = append(matches, match)
+		matches = append(matches, groupMatches...)
 	}
+
 	return matches, nil
 }
 
-func (svc *RobotService) startSumoMatches(ctx context.Context, categoryID domain.CategoryID, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
+func (svc *RobotService) startOnePairWithQueue(ctx context.Context, categoryID domain.CategoryID, bracketID string, isInternal bool, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
+	bracketID = groupedBracketID(bracketID, isInternal)
+	if active := activeMatchForGroup(existingMatches, isInternal, bracketID); active != nil {
+		return []*domain.Match{active}, nil
+	}
+	if len(teams) < 2 {
+		return []*domain.Match{}, nil
+	}
+
+	round := nextBracketRoundIndex(bracketID, existingMatches)
+	match, err := domain.NewPairMatch(teams[0], teams[1], categoryID)
+	if err != nil {
+		return nil, err
+	}
+	for _, team := range teams[2:] {
+		if err := match.AddToQueue(team); err != nil {
+			return nil, err
+		}
+	}
+	match.IsInternal = isInternal
+	match.BracketID = bracketID
+	match.BracketRound = round
+	match.BracketSlot = 0
+	match.BracketKey = fmt.Sprintf("r%d-m%d", match.BracketRound, match.BracketSlot)
+	match.Status = domain.MatchStatusReady
+	id, err := svc.matchRepository.Insert(ctx, match)
+	if err != nil {
+		return nil, err
+	}
+	match.ID = id
+	return []*domain.Match{match}, nil
+}
+
+func (svc *RobotService) startSumoMatches(ctx context.Context, categoryID domain.CategoryID, isInternal bool, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
 	losses := sumoLosses(existingMatches)
 	winnerTeams := make([]domain.Team, 0, len(teams))
 	loserTeams := make([]domain.Team, 0, len(teams))
@@ -262,13 +307,13 @@ func (svc *RobotService) startSumoMatches(ctx context.Context, categoryID domain
 	}
 
 	var matches []*domain.Match
-	winnerMatches, err := svc.startPairwiseMatches(ctx, categoryID, "winner", winnerTeams, existingMatches)
+	winnerMatches, err := svc.startOnePairWithQueue(ctx, categoryID, "winner", isInternal, winnerTeams, existingMatches)
 	if err != nil {
 		return nil, err
 	}
 	matches = append(matches, winnerMatches...)
 
-	loserMatches, err := svc.startPairwiseMatches(ctx, categoryID, "loser", loserTeams, existingMatches)
+	loserMatches, err := svc.startOnePairWithQueue(ctx, categoryID, "loser", isInternal, loserTeams, existingMatches)
 	if err != nil {
 		return nil, err
 	}
@@ -276,19 +321,22 @@ func (svc *RobotService) startSumoMatches(ctx context.Context, categoryID domain
 	return matches, nil
 }
 
-func (svc *RobotService) startSharedMatch(ctx context.Context, categoryID domain.CategoryID, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
-	teamIDs := make([]domain.TeamID, 0, len(teams))
-	for _, team := range teams {
-		teamIDs = append(teamIDs, team.ID)
-	}
-	if existing := findExistingSharedMatch(existingMatches, teamIDs); existing != nil {
-		return []*domain.Match{existing}, nil
+func (svc *RobotService) startQueueMatch(ctx context.Context, categoryID domain.CategoryID, bracketID string, isInternal bool, teams []domain.Team, existingMatches []*domain.Match) ([]*domain.Match, error) {
+	bracketID = groupedBracketID(bracketID, isInternal)
+	if active := activeMatchForGroup(existingMatches, isInternal, bracketID); active != nil {
+		return []*domain.Match{active}, nil
 	}
 
 	match, err := domain.NewQueueMatch(categoryID, teams)
 	if err != nil {
 		return nil, err
 	}
+	match.IsInternal = isInternal
+	match.BracketID = bracketID
+	match.BracketRound = nextBracketRoundIndex(bracketID, existingMatches)
+	match.BracketSlot = 0
+	match.BracketKey = fmt.Sprintf("r%d-m%d", match.BracketRound, match.BracketSlot)
+	match.Status = domain.MatchStatusReady
 	id, err := svc.matchRepository.Insert(ctx, match)
 	if err != nil {
 		return nil, err
@@ -337,6 +385,37 @@ func availableSumoTeamsForQueue(teams []domain.Team, existingMatches []*domain.M
 		available = append(available, team)
 	}
 	return available
+}
+
+func teamsByInternalStatus(teams []domain.Team) map[bool][]domain.Team {
+	groups := map[bool][]domain.Team{
+		true:  {},
+		false: {},
+	}
+	for _, team := range teams {
+		groups[team.IsInternal] = append(groups[team.IsInternal], team)
+	}
+	return groups
+}
+
+func activeMatchForGroup(matches []*domain.Match, isInternal bool, bracketID string) *domain.Match {
+	for _, match := range matches {
+		if match.IsInternal != isInternal || match.BracketID != bracketID {
+			continue
+		}
+		if match.Result != nil || match.Status == domain.MatchStatusCompleted {
+			continue
+		}
+		return match
+	}
+	return nil
+}
+
+func groupedBracketID(bracketID string, isInternal bool) string {
+	if isInternal {
+		return bracketID + "-internal"
+	}
+	return bracketID + "-external"
 }
 
 func activeMatchTeams(matches []*domain.Match) map[domain.TeamID]struct{} {
@@ -449,6 +528,14 @@ func inferMatchMode(categoryName string) domain.MatchMode {
 
 func isSumoCategory(categoryName string) bool {
 	return strings.Contains(normalizeCategoryName(categoryName), "sumo")
+}
+
+func isFutbolCategory(categoryName string) bool {
+	return strings.Contains(normalizeCategoryName(categoryName), "futbol")
+}
+
+func isVelocistaCategory(categoryName string) bool {
+	return strings.Contains(normalizeCategoryName(categoryName), "velocista")
 }
 
 func normalizeCategoryName(name string) string {

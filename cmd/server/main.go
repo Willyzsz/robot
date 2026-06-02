@@ -51,6 +51,7 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
+	userRepo := store.NewUserStore(storeDB)
 	categoryRepo := store.NewCategoryStore(storeDB)
 	ruleRepo := store.NewRuleStore(storeDB)
 	teamRepo := store.NewTeamStore(storeDB)
@@ -59,10 +60,11 @@ func main() {
 	resultRepo := store.NewResultStore(storeDB)
 	robotRepo := store.NewRobotStore(storeDB)
 
-	robotService := service.NewRobotService(categoryRepo, ruleRepo, teamRepo, memberRepo, matchRepo, resultRepo, robotRepo)
+	robotService := service.NewRobotService(userRepo, categoryRepo, ruleRepo, teamRepo, memberRepo, matchRepo, resultRepo, robotRepo)
 	robotHandler := handler.NewHandler(robotService)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /login", robotHandler.Login)
 	mux.HandleFunc("GET /registro", robotHandler.GetAllTeamsWithMembersAndCategory)
 	mux.HandleFunc("GET /registro/{category_id}/equipos", robotHandler.GetTeamsWithMembersByCategory)
 

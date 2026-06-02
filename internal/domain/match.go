@@ -25,6 +25,7 @@ type Match struct {
 	TeamB        *Team       `json:"team_b,omitempty"`
 	Queue        []TeamID    `json:"queue,omitempty"`
 	CategoryID   CategoryID  `json:"category_id"`
+	IsInternal   bool        `json:"is_internal"`
 	BracketID    string      `json:"bracket_id,omitempty"`
 	BracketKey   string      `json:"bracket_key,omitempty"`
 	BracketRound int         `json:"bracket_round,omitempty"`

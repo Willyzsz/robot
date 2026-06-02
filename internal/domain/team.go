@@ -10,6 +10,7 @@ type Team struct {
 	School     string     `json:"school"`
 	Grade      string     `json:"grade"`
 	Teacher    string     `json:"teacher"`
+	IsInternal bool       `json:"is_internal"`
 	Members    []*Member  `json:"members"`
 	RobotValid bool       `json:"robot_valid"`
 	CategoryID CategoryID `json:"category_id"`
@@ -21,6 +22,7 @@ type TeamQuery struct {
 	School     string     `json:"school"`
 	Grade      string     `json:"grade"`
 	Teacher    string     `json:"teacher"`
+	IsInternal *bool      `json:"is_internal"`
 	CategoryID CategoryID `json:"category_id"`
 }
 

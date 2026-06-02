@@ -35,8 +35,8 @@ func (st *MatchStore) Insert(ctx context.Context, match *domain.Match) (domain.M
 
 	query := `
 		INSERT INTO "match"
-		(team_a_id, team_b_id, category_id, bracket_id, bracket_key, bracket_round, bracket_slot, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		(team_a_id, team_b_id, category_id, is_internal, bracket_id, bracket_key, bracket_round, bracket_slot, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
 
@@ -45,6 +45,7 @@ func (st *MatchStore) Insert(ctx context.Context, match *domain.Match) (domain.M
 		matchTeamID(match.TeamA),
 		matchTeamID(match.TeamB),
 		match.CategoryID,
+		match.IsInternal,
 		nullableString(match.BracketID),
 		nullableString(match.BracketKey),
 		nullableInt(match.BracketRound, match.BracketKey),
@@ -245,6 +246,7 @@ type matchRow interface {
 func scanMatch(row matchRow) (*domain.Match, error) {
 	var id domain.MatchID
 	var categoryID domain.CategoryID
+	var isInternal bool
 	var bracketID sql.NullString
 	var bracketKey sql.NullString
 	var bracketRound sql.NullInt64
@@ -255,17 +257,20 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 	var teamASchool sql.NullString
 	var teamAGrade sql.NullString
 	var teamATeacher sql.NullString
+	var teamAIsInternal sql.NullBool
 	var teamACategoryID sql.NullInt64
 	var teamBID sql.NullInt64
 	var teamBName sql.NullString
 	var teamBSchool sql.NullString
 	var teamBGrade sql.NullString
 	var teamBTeacher sql.NullString
+	var teamBIsInternal sql.NullBool
 	var teamBCategoryID sql.NullInt64
 
 	err := row.Scan(
 		&id,
 		&categoryID,
+		&isInternal,
 		&bracketID,
 		&bracketKey,
 		&bracketRound,
@@ -276,12 +281,14 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 		&teamASchool,
 		&teamAGrade,
 		&teamATeacher,
+		&teamAIsInternal,
 		&teamACategoryID,
 		&teamBID,
 		&teamBName,
 		&teamBSchool,
 		&teamBGrade,
 		&teamBTeacher,
+		&teamBIsInternal,
 		&teamBCategoryID,
 	)
 	if err != nil {
@@ -292,6 +299,7 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 		ID:           id,
 		Queue:        []domain.TeamID{},
 		CategoryID:   categoryID,
+		IsInternal:   isInternal,
 		BracketID:    bracketID.String,
 		BracketKey:   bracketKey.String,
 		BracketRound: int(bracketRound.Int64),
@@ -306,6 +314,7 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 			School:     teamASchool.String,
 			Grade:      teamAGrade.String,
 			Teacher:    teamATeacher.String,
+			IsInternal: teamAIsInternal.Bool,
 			CategoryID: domain.CategoryID(teamACategoryID.Int64),
 		}
 	}
@@ -316,6 +325,7 @@ func scanMatch(row matchRow) (*domain.Match, error) {
 			School:     teamBSchool.String,
 			Grade:      teamBGrade.String,
 			Teacher:    teamBTeacher.String,
+			IsInternal: teamBIsInternal.Bool,
 			CategoryID: domain.CategoryID(teamBCategoryID.Int64),
 		}
 	}
@@ -328,6 +338,7 @@ func matchSelectQuery() string {
 		SELECT
 			m.id,
 			m.category_id,
+			m.is_internal,
 			m.bracket_id,
 			m.bracket_key,
 			m.bracket_round,
@@ -338,12 +349,14 @@ func matchSelectQuery() string {
 			ta.school,
 			ta.grade,
 			ta.teacher,
+			ta.is_internal,
 			ta.category_id,
 			tb.id,
 			tb.name,
 			tb.school,
 			tb.grade,
 			tb.teacher,
+			tb.is_internal,
 			tb.category_id
 		FROM "match" m
 		LEFT JOIN team ta ON ta.id = m.team_a_id

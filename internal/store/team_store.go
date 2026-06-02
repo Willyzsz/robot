@@ -28,8 +28,8 @@ func (st *TeamStore) Insert(ctx context.Context, team *domain.Team) (domain.Team
 
 	query := `
 		INSERT INTO team
-		(name, school, grade, teacher, category_id)
-		VALUES ($1, $2, $3, $4, $5)
+		(name, school, grade, teacher, is_internal, category_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
 
@@ -39,6 +39,7 @@ func (st *TeamStore) Insert(ctx context.Context, team *domain.Team) (domain.Team
 		team.School,
 		team.Grade,
 		team.Teacher,
+		team.IsInternal,
 		team.CategoryID,
 	).Scan(&id)
 	if err != nil {
@@ -61,15 +62,12 @@ func (st *TeamStore) FindByID(ctx context.Context, id domain.TeamID) (*domain.Te
 	op := "FindByID"
 
 	query := `
-		SELECT id, name, school, grade, teacher, category_id
+		SELECT id, name, school, grade, teacher, is_internal, category_id
 		FROM team
 		WHERE id = $1
 	`
-	var foundID domain.TeamID
-	var name, school, grade, teacher string
-	var categoryID domain.CategoryID
 
-	err := st.store.db.QueryRow(ctx, query, id).Scan(&foundID, &name, &school, &grade, &teacher, &categoryID)
+	team, err := scanTeam(st.store.db.QueryRow(ctx, query, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "id", Value: id})
@@ -77,11 +75,6 @@ func (st *TeamStore) FindByID(ctx context.Context, id domain.TeamID) (*domain.Te
 		return nil, apperr.Wrap(op, "unexpected error selecting id", err, apperr.Field{Name: "id", Value: id})
 	}
 
-	team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
-	if err != nil {
-		return nil, err
-	}
-	team.ID = foundID
 	return team, nil
 }
 
@@ -89,15 +82,12 @@ func (st *TeamStore) FindByName(ctx context.Context, name string) (*domain.Team,
 	op := "FindByName"
 
 	query := `
-		SELECT id, name, school, grade, teacher, category_id
+		SELECT id, name, school, grade, teacher, is_internal, category_id
 		FROM team
 		WHERE name = $1
 	`
-	var id domain.TeamID
-	var foundName, school, grade, teacher string
-	var categoryID domain.CategoryID
 
-	err := st.store.db.QueryRow(ctx, query, name).Scan(&id, &foundName, &school, &grade, &teacher, &categoryID)
+	team, err := scanTeam(st.store.db.QueryRow(ctx, query, name))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperr.Wrap(op, "", domain.ErrNotFound, apperr.Field{Name: "name", Value: name})
@@ -105,12 +95,6 @@ func (st *TeamStore) FindByName(ctx context.Context, name string) (*domain.Team,
 		return nil, apperr.Wrap(op, "unexpected error selecting name", err, apperr.Field{Name: "name", Value: name})
 	}
 
-	team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
-	if err != nil {
-		return nil, err
-	}
-
-	team.ID = id
 	return team, nil
 }
 
@@ -124,21 +108,10 @@ func (st *TeamStore) Find(ctx context.Context, t domain.TeamQuery) ([]*domain.Te
 	}
 
 	teams, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Team, error) {
-		var foundID domain.TeamID
-		var name, school, grade, teacher string
-		var categoryID domain.CategoryID
-
-		err := row.Scan(&foundID, &name, &school, &grade, &teacher, &categoryID)
+		team, err := scanTeam(row)
 		if err != nil {
 			return nil, apperr.Wrap(op, "unexpected error scanning team", err, apperr.Field{Name: "scan", Value: row})
 		}
-
-		team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
-		if err != nil {
-			return nil, err
-		}
-
-		team.ID = foundID
 		return team, nil
 	})
 
@@ -152,7 +125,7 @@ func (st *TeamStore) FindAll(ctx context.Context) ([]*domain.Team, error) {
 	op := "FindAll"
 
 	query := `
-		SELECT id, name, school, grade, teacher, category_id
+		SELECT id, name, school, grade, teacher, is_internal, category_id
 		FROM team
 	`
 	rows, err := st.store.db.Query(ctx, query)
@@ -161,21 +134,10 @@ func (st *TeamStore) FindAll(ctx context.Context) ([]*domain.Team, error) {
 	}
 
 	teams, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Team, error) {
-		var id domain.TeamID
-		var name, school, grade, teacher string
-		var categoryID domain.CategoryID
-
-		err := row.Scan(&id, &name, &school, &grade, &teacher, &categoryID)
+		team, err := scanTeam(row)
 		if err != nil {
 			return nil, apperr.Wrap(op, "unexpected error scanning team", err, apperr.Field{Name: "scan", Value: row})
 		}
-
-		team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
-		if err != nil {
-			return nil, err
-		}
-
-		team.ID = id
 		return team, nil
 	})
 
@@ -187,7 +149,7 @@ func (st *TeamStore) FindAll(ctx context.Context) ([]*domain.Team, error) {
 
 func (st *TeamStore) buildQuery(t domain.TeamQuery) ([]any, string) {
 	query := `
-		SELECT id, name, school, grade, teacher, category_id
+		SELECT id, name, school, grade, teacher, is_internal, category_id
 		FROM team
 		WHERE 1=1
 	`
@@ -212,6 +174,10 @@ func (st *TeamStore) buildQuery(t domain.TeamQuery) ([]any, string) {
 		args = append(args, t.Teacher)
 		query += fmt.Sprintf(" AND teacher = $%d", len(args))
 	}
+	if t.IsInternal != nil {
+		args = append(args, *t.IsInternal)
+		query += fmt.Sprintf(" AND is_internal = $%d", len(args))
+	}
 
 	if t.CategoryID != 0 {
 		args = append(args, t.CategoryID)
@@ -219,4 +185,27 @@ func (st *TeamStore) buildQuery(t domain.TeamQuery) ([]any, string) {
 	}
 
 	return args, query
+}
+
+type teamRow interface {
+	Scan(dest ...any) error
+}
+
+func scanTeam(row teamRow) (*domain.Team, error) {
+	var id domain.TeamID
+	var name, school, grade, teacher string
+	var isInternal bool
+	var categoryID domain.CategoryID
+
+	if err := row.Scan(&id, &name, &school, &grade, &teacher, &isInternal, &categoryID); err != nil {
+		return nil, err
+	}
+
+	team, err := domain.NewTeam(name, school, grade, teacher, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	team.ID = id
+	team.IsInternal = isInternal
+	return team, nil
 }

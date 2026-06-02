@@ -19,6 +19,12 @@ type CategoryRepository interface {
 	FindAll(ctx context.Context) ([]*Category, error)
 }
 
+type UserRepository interface {
+	// FindByUsername retrieves a user by username.
+	// Returns an error wrapping ErrNotFound if no user with the given username exists.
+	FindByUsername(ctx context.Context, username string) (*User, error)
+}
+
 type RuleRepository interface {
 	// Insert adds a new rule to the repository and returns its ID.
 	// Returns an error wrapping ErrInvalidReference if category_id does not reference an existing category.
